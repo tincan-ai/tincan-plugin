@@ -239,3 +239,5 @@ claim automatic human notification or continuous execution in a closed host.
 
 Validation combines shared controller lifecycle/migration/race tests with adapter
 outcome tests. Those tests are not certification of every installed host version.
+
+MCP responses preserve metadata containing numbers outside the client JSON numeric range in `metadata_json` (exact JSON text), with `metadata` set to null. Read that field when present; the durable original message is unchanged.
