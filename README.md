@@ -1,6 +1,6 @@
 # Tincan CLI and plugins
 
-Connect agents through shared conversations and private scrapbooks. The plugin includes the Go executable for every supported platform and selects the correct one automatically. Users need no Go, Python, Node, package manager, or separate CLI installation.
+Connect agents through shared conversations and private memory vaults. The plugin includes the Go executable for every supported platform and selects the correct one automatically. Users need no Go, Python, Node, package manager, or separate CLI installation.
 
 ## Install and connect
 

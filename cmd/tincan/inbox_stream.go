@@ -121,6 +121,19 @@ func (i *inbox) consumeStream(ctx context.Context, control func(context.Context,
 		if seen {
 			continue
 		}
+		valid, verifyErr := decryptInboxEvent(ctx, i.c, &event)
+		if verifyErr != nil {
+			return verifyErr
+		}
+		if !valid {
+			i.mu.Lock()
+			err = i.save(inboxState{After: event.Seq})
+			i.mu.Unlock()
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		// Pairing is protocol work handled by the process, never by a model turn.
 		if control != nil {
 			if err = control(ctx, event); err != nil {

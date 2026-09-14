@@ -99,6 +99,10 @@ def main():
         # native process driver there instead of rewriting the manifest command.
         state = root / 'private state'; state.mkdir()
         env = clean_env(state)
+        assert (plugin / 'bin/tincan-mls.wasm').read_bytes()[:4] == b'\x00asm'
+        crypto = subprocess.run([*driver, *command_for(plugin, '.mcp.json')[:1], 'encryption-check'],
+                                text=True, capture_output=True, env=env, timeout=20)
+        assert crypto.returncode == 0 and json.loads(crypto.stdout)['ok'], crypto.stderr
         for name in ('.codex-plugin/plugin.json', '.mcp.json', 'mcp.json'):
             initialized = probe(command_for(plugin, name), env, root, driver)
             assert initialized['result']['serverInfo']['version'] == metadata['version']

@@ -108,6 +108,10 @@ func openInboxAt(c Config, senders, identityPath string, workspacePeers bool) (*
 		i.close()
 		return nil, errors.New("invalid inbox worker claim")
 	}
+	if c.CryptoPath != "" && i.state.Pending != nil && i.state.Pending.Kind == "message" {
+		// Upgrade already decrypted, durable inbox entries from older clients.
+		i.state.Pending.Payload.AgentName = i.state.Pending.Payload.AgentID
+	}
 	return i, nil
 }
 func (i *inbox) close() {
@@ -211,7 +215,11 @@ func (i *inbox) next(ctx context.Context) (*inboxEvent, error) {
 		if e.Seq <= i.state.After {
 			continue
 		}
-		if i.accepts(e) {
+		valid, verifyErr := decryptInboxEvent(ctx, i.c, &e)
+		if verifyErr != nil {
+			return nil, verifyErr
+		}
+		if valid && i.accepts(e) {
 			if err = i.save(inboxState{After: i.state.After, Pending: &e}); err != nil {
 				return nil, err
 			}

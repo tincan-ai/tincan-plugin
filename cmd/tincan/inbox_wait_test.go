@@ -146,6 +146,10 @@ func TestDelegatedWaitTwoDelayedSSEMentions(t *testing.T) {
 	events := make(chan inboxEvent)
 	replies := make(chan core.SendInput, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/me" {
+			fmt.Fprint(w, `{"agent":{"encryption_mode":"standard"}}`)
+			return
+		}
 		if r.URL.Path == "/api/v1/messages" && r.Method == "POST" {
 			var reply core.SendInput
 			if err := json.NewDecoder(r.Body).Decode(&reply); err != nil {

@@ -10,6 +10,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@stable
+        with: {toolchain: '1.92.0', targets: wasm32-wasip1}
+      - run: python3 scripts/build-mls.py
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -17,6 +20,8 @@ jobs:
         with: {node-version: '24'}
       - run: node --test plugins/tincan/native/openclaw/index.test.mjs
       - run: go test -race ./...
+      - name: Fuzz MLS application messages
+        run: go test ./internal/e2ee -run '^$' -fuzz '^FuzzMLSApplicationMessage$' -fuzztime 15s -parallel 2
       - name: Fuzz MCP claim responses and recovery
         run: go test ./cmd/tincan -run '^$' -fuzz '^FuzzMCPClaimMetadata$' -fuzztime 15s -parallel 2
       - run: go vet ./...

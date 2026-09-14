@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from urllib.parse import urlsplit
 import zipfile
@@ -22,10 +23,13 @@ def write_json(path, value):
 
 def build(root, output, go, server, version, targets, marketplace=None, harness=None):
     output.mkdir(parents=True, exist_ok=True)
+    subprocess.run([sys.executable, str(root / 'scripts/build-mls.py')], cwd=root, check=True)
     with tempfile.TemporaryDirectory(prefix='tincan-release-') as tmp:
         plugin = Path(tmp) / 'tincan'
         shutil.copytree(root / 'plugins/tincan', plugin,
                         ignore=shutil.ignore_patterns('bin', '__pycache__', '.DS_Store', '.env', '.env.*'))
+        (plugin / 'bin').mkdir(exist_ok=True)
+        shutil.copy2(root / '.tools/mls/wasm32-wasip1/release/tincan-mls.wasm', plugin / 'bin/tincan-mls.wasm')
         for manifest_name in ('.claude-plugin/plugin.json', '.codex-plugin/plugin.json', '.cursor-plugin/plugin.json', 'package.json', 'plugin.json'):
             path = plugin / manifest_name
             manifest = json.loads(path.read_text())
@@ -77,7 +81,7 @@ def build(root, output, go, server, version, targets, marketplace=None, harness=
         yaml_manifest = plugin / 'plugin.yaml'
         yaml_manifest.write_text(re.sub(r'^version: .*$', 'version: ' + version, yaml_manifest.read_text(), flags=re.M))
         shutil.copy2(root / 'LICENSE', plugin / 'LICENSE')
-        for name in ('CLOUD_AGENTS.md', 'AGENT_METADATA.md', 'AGENT_TEXT.md', 'ONBOARDING.md', 'CLIENTS.md', 'HARNESS_DELIVERY.md', 'CLAUDE_WAKE.md'):
+        for name in ('E2EE.md', 'CLOUD_AGENTS.md', 'AGENT_METADATA.md', 'AGENT_TEXT.md', 'ONBOARDING_RELEASE_GATE.md', 'ONBOARDING.md', 'CLIENTS.md', 'HARNESS_DELIVERY.md', 'CLAUDE_WAKE.md'):
             (plugin / 'docs').mkdir(exist_ok=True)
             shutil.copy2(root / 'docs' / name, plugin / 'docs' / name)
             doc = plugin / 'docs' / name
@@ -94,7 +98,8 @@ def build(root, output, go, server, version, targets, marketplace=None, harness=
         files = {p.relative_to(plugin).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                  for p in sorted(plugin.rglob('*')) if p.is_file()}
         write_json(plugin / 'release.json', {'version': version, 'server': server, 'harness': harness or 'portable',
-                   'targets': binaries, 'files': files, 'protocol': 'tincan/1', 'cgo': False})
+                   'targets': binaries, 'files': files, 'protocol': 'tincan/1', 'cgo': False,
+                   'onboarding_digest': json.loads((plugin / 'onboarding-contract.json').read_text())['digest']})
         filename = 'tincan-plugin.zip' if targets == TARGETS else f'tincan-{targets[0]}.zip'
         if harness:
             filename = filename.replace('tincan-', 'tincan-' + harness + '-', 1)
@@ -103,6 +108,15 @@ def build(root, output, go, server, version, targets, marketplace=None, harness=
             for file in sorted(plugin.rglob('*')):
                 if file.is_file(): archive.write(file, file.relative_to(plugin.parent))
         (output / 'SHA256SUMS').write_text(''.join(f'{hashlib.sha256(item.read_bytes()).hexdigest()}  {item.name}\n' for item in sorted(output.glob('*.zip'))))
+        archives = {}
+        for item in sorted(output.glob('*.zip')):
+            with zipfile.ZipFile(item) as bundle:
+                release = json.loads(bundle.read('tincan/release.json'))
+            archives[item.name] = {'sha256': hashlib.sha256(item.read_bytes()).hexdigest(),
+                'size': item.stat().st_size, 'version': release['version'],
+                'server': release['server'], 'targets': sorted(release['targets']),
+                'onboarding_digest': release['onboarding_digest']}
+        write_json(output / 'manifest.json', {'schema_version': 1, 'archives': archives})
         if marketplace:
             if marketplace.exists(): raise ValueError('marketplace output must be a fresh directory')
             shutil.copytree(plugin, marketplace / 'plugins/tincan')

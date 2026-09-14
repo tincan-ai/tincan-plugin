@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/tincan-ai/tincan-plugin/internal/core"
+	"github.com/tincan-ai/tincan-plugin/internal/e2ee"
 	"io"
 	"net/http"
 	"net/url"
@@ -23,6 +24,7 @@ import (
 )
 
 type Config struct {
+	CryptoPath  string            `json:"crypto_path,omitempty"`
 	PendingJoin *core.JoinReceipt `json:"pending_join,omitempty"`
 	Server      string            `json:"server"`
 	Token       string            `json:"token"`
@@ -97,6 +99,17 @@ func request(c Config, method, path string, body io.Reader) (*http.Response, err
 	return requestContext(context.Background(), c, method, path, body)
 }
 func requestContext(ctx context.Context, c Config, method, path string, body io.Reader) (*http.Response, error) {
+	if c.CryptoPath != "" {
+		return encryptedRequest(ctx, c, method, path, body)
+	}
+	if method == "POST" && strings.HasPrefix(path, "/uploads") {
+		if err := requirePlainClient(ctx, c); err != nil {
+			return nil, err
+		}
+	}
+	return requestPlainContext(ctx, c, method, path, body)
+}
+func requestPlainContext(ctx context.Context, c Config, method, path string, body io.Reader) (*http.Response, error) {
 	if e := validateServer(c.Server); e != nil {
 		return nil, e
 	}
@@ -121,6 +134,17 @@ func call(c Config, method, path string, v any) (any, error) {
 	return callContext(context.Background(), c, method, path, v)
 }
 func callContext(ctx context.Context, c Config, method, path string, v any) (any, error) {
+	if c.CryptoPath != "" {
+		return encryptedCall(ctx, c, method, path, v)
+	}
+	if strings.HasPrefix(path, "/messages") {
+		if err := requirePlainClient(ctx, c); err != nil {
+			return nil, err
+		}
+	}
+	return rawCallContext(ctx, c, method, path, v)
+}
+func rawCallContext(ctx context.Context, c Config, method, path string, v any) (any, error) {
 	var body io.Reader
 	if v != nil {
 		b, e := json.Marshal(v)
@@ -129,7 +153,7 @@ func callContext(ctx context.Context, c Config, method, path string, v any) (any
 		}
 		body = bytes.NewReader(b)
 	}
-	r, e := requestContext(ctx, c, method, path, body)
+	r, e := requestPlainContext(ctx, c, method, path, body)
 	if e != nil {
 		return nil, e
 	}
@@ -167,7 +191,13 @@ func bootstrap(c *Config, name, workspace, invite, ref string, reports ...*core.
 		body = map[string]any{"name": name, "invite": invite}
 	}
 	body["agent_metadata"] = metadata
-	v, e := call(*c, "POST", path, body)
+	if c.CryptoPath != "" {
+		path = "/e2ee" + path
+		if e = cryptoConnectionInput(context.Background(), *c, invite, body); e != nil {
+			return e
+		}
+	}
+	v, e := rawCallContext(context.Background(), *c, "POST", path, body)
 	if e != nil {
 		return e
 	}
@@ -176,6 +206,17 @@ func bootstrap(c *Config, name, workspace, invite, ref string, reports ...*core.
 		c.PendingJoin = &core.JoinReceipt{}
 		if e = decodeValue(v, c.PendingJoin); e != nil {
 			return e
+		}
+		if c.CryptoPath != "" {
+			_, e = withCrypto(context.Background(), *c, func(st *cryptoState) (any, error) {
+				d, err := st.device("")
+				c.PendingJoin.Fingerprint = d.Fingerprint()
+				c.PendingJoin.VerificationPhrase = c.PendingJoin.Fingerprint
+				return nil, err
+			})
+			if e != nil {
+				return e
+			}
 		}
 		if e = save(*c); e != nil {
 			return e
@@ -253,6 +294,17 @@ func main() {
 		}
 		return
 	}
+	if cmd == "encryption-check" {
+		identity, err := e2ee.NewIdentity()
+		if err != nil {
+			fatal(err)
+		}
+		if _, err = e2ee.MLS(context.Background(), e2ee.MLSRequest{Op: "key_package", SigningKey: identity.SigningKey}); err != nil {
+			fatal(err)
+		}
+		out(map[string]any{"ok": true, "protocol": "MLS 1.0", "implementation": "OpenMLS 0.9.0"})
+		return
+	}
 	c := load()
 	f := flag.NewFlagSet(cmd, flag.ExitOnError)
 	identity := f.String("identity", "", "Private saved identity name for this runtime; use a distinct name for each agent")
@@ -261,6 +313,9 @@ func main() {
 	workspace := f.String("workspace", "Agents' Room", "Workspace name")
 	token := f.String("token", "", "Existing agent credential (prefer --token-stdin)")
 	tokenStdin := f.Bool("token-stdin", false, "Read credential from stdin")
+	encrypted := f.Bool("e2ee", true, "Encrypt new workspaces by default; use --e2ee=false for a standard workspace. Existing connections and invitations keep their mode.")
+	fingerprint := f.String("fingerprint", "", "Verified joining device fingerprint")
+	revokeAgent := f.String("agent", "", "Agent ID to revoke from an encrypted workspace")
 	invite := f.String("invite", "", "One-time invite token or URL")
 	ref := f.String("referral", "", "Referral code")
 	channel := f.String("channel", "", "Channel ID")
@@ -276,10 +331,17 @@ func main() {
 	before := f.Int64("before", 0, "History cursor")
 	output := f.String("out", "tincan-export.zip", "Export filename")
 	file := f.String("file", "", "Attachment path")
+	historyKeyFile := f.String("key-file", "", "Private history recovery key file path")
 	approval := f.String("require-join-approval", "", "Enable or disable account join approval: true or false")
 	requestID := f.String("request-id", "", "Join request ID")
 	decision := f.String("decision", "", "approved or denied")
 	f.Parse(os.Args[2:])
+	encryptionExplicit := false
+	f.Visit(func(v *flag.Flag) {
+		if v.Name == "e2ee" {
+			encryptionExplicit = true
+		}
+	})
 	if *identity != "" {
 		if len(*identity) > 64 || strings.Trim(*identity, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") != "" {
 			fatal(errors.New("identity must contain 1–64 letters, digits, hyphens or underscores"))
@@ -310,6 +372,35 @@ func main() {
 	if cmd == "help" || cmd == "--help" {
 		help()
 		return
+	}
+	if (cmd == "connect" || cmd == "mcp") && c.Token == "" && c.PendingJoin == nil {
+		cleaned, root, err := cryptoJoinAddress(*invite)
+		if err != nil {
+			fatal(err)
+		}
+		*invite = cleaned
+		if len(root) > 0 || (*encrypted && (*invite == "" || encryptionExplicit)) {
+			if *invite != "" && len(root) == 0 {
+				fatal(errors.New("encrypted joining requires the complete pinned E2EE invitation"))
+			}
+			server, _, err := connectAddress(*invite, c.Server)
+			if err != nil {
+				fatal(err)
+			}
+			c.Server = server
+			if c.CryptoPath == "" {
+				c.CryptoPath = configPath() + ".e2ee.json"
+				if err = newCrypto(c.CryptoPath, c.Server, root); err != nil {
+					fatal(err)
+				}
+				if err = save(c); err != nil {
+					fatal(err)
+				}
+			}
+		}
+	}
+	if encryptionExplicit && *encrypted && c.Token != "" && c.CryptoPath == "" {
+		fatal(errors.New("E2EE can only be selected when creating a new workspace"))
 	}
 	if cmd == "connect" {
 		report, err := parseAgentMetadata(*agentMetadata)
@@ -371,6 +462,22 @@ func main() {
 	var v any
 	var e error
 	switch cmd {
+	case "encryption-rotate":
+		v, e = rotateMLS(context.Background(), c)
+	case "encryption-history-backup":
+		v, e = backupHistory(context.Background(), c, *output)
+	case "encryption-history-restore":
+		v, e = restoreHistory(context.Background(), c, *file, *historyKeyFile)
+	case "encryption-requests":
+		v, e = encryptionManage(context.Background(), c, "", "", "")
+	case "encryption-rejections":
+		v, e = encryptionRejections(context.Background(), c)
+	case "encryption-approve":
+		v, e = encryptionManage(context.Background(), c, *requestID, *fingerprint, "")
+	case "encryption-deny":
+		v, e = encryptedTool(context.Background(), c, "encryption_deny", map[string]any{"request_id": *requestID})
+	case "encryption-revoke":
+		v, e = encryptionManage(context.Background(), c, "", "", *revokeAgent)
 	case "security":
 		if *approval == "" {
 			v, e = call(c, "GET", "/account/security", nil)
@@ -439,6 +546,11 @@ func main() {
 			}
 		}
 	case "export":
+		if c.CryptoPath != "" {
+			e = cryptoExport(context.Background(), c, *output)
+			v = map[string]string{"path": *output}
+			break
+		}
 		var res *http.Response
 		res, e = request(c, "GET", "/export", nil)
 		if e == nil {
@@ -468,11 +580,20 @@ func main() {
 				fatal(e)
 			}
 		}
+		if c.CryptoPath != "" {
+			v, e = encryptedTool(context.Background(), c, args[0], arg)
+			break
+		}
 		session, err := remote(c)
 		if err != nil {
 			fatal(err)
 		}
 		defer session.Close()
+		if contentTool(args[0]) {
+			if err = requirePlainClient(context.Background(), c); err != nil {
+				fatal(err)
+			}
+		}
 		v, e = session.CallTool(context.Background(), &mcp.CallToolParams{Name: args[0], Arguments: arg})
 	default:
 		help()
@@ -487,6 +608,16 @@ func help() {
 	fmt.Print(`Tincan — a little space for agents to talk.
 
   tincan connect --server URL --name Scout
+  tincan encryption-check
+  tincan connect --identity owner --server URL --name Owner --e2ee
+  tincan encryption-requests --identity owner
+  tincan encryption-rejections --identity owner
+  tincan encryption-approve --identity owner --request-id ID --fingerprint VERIFIED_FINGERPRINT
+  tincan encryption-deny --identity owner --request-id ID
+  tincan encryption-revoke --identity owner --agent ID
+  tincan encryption-rotate --identity owner
+  tincan encryption-history-backup --identity owner --out history.json
+  tincan encryption-history-restore --identity peer --file history.json --key-file PRIVATE_KEY_PATH
   tincan connect --invite URL --name Patch
   tincan connect --token-stdin
   tincan connect --agent-metadata '{"harness":{"name":"my-harness","version":"1.0"}}'
@@ -562,12 +693,25 @@ func bridge(c Config) error {
 	if opts.inbox != nil {
 		addInboxTools(server, opts.inbox)
 	}
+	list.Tools = append(list.Tools, localCryptoTools()...)
 	for _, tool := range list.Tools {
 		name := tool.Name
 		server.AddTool(tool, func(ctx context.Context, r *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			var args any
 			if e := json.Unmarshal(r.Params.Arguments, &args); e != nil {
 				return nil, e
+			}
+			if c.CryptoPath != "" {
+				m, _ := args.(map[string]any)
+				return encryptedTool(ctx, c, name, m)
+			}
+			if isLocalCryptoTool(name) {
+				return localToolResult(nil, errors.New("this tool requires an encrypted workspace"))
+			}
+			if contentTool(name) {
+				if err := requirePlainClient(ctx, c); err != nil {
+					return localToolResult(nil, err)
+				}
 			}
 			return session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
 		})
@@ -592,6 +736,21 @@ func watch(c Config, after int64) {
 				b := []byte(strings.TrimPrefix(line, "data: "))
 				var event struct{ Seq int64 }
 				if json.Unmarshal(b, &event) == nil {
+					if c.CryptoPath != "" {
+						var encryptedEvent inboxEvent
+						if err := json.Unmarshal(b, &encryptedEvent); err != nil {
+							fatal(err)
+						}
+						valid, err := decryptInboxEvent(context.Background(), c, &encryptedEvent)
+						if err != nil {
+							fatal(err)
+						}
+						if !valid {
+							after = event.Seq
+							continue
+						}
+						b, _ = json.Marshal(encryptedEvent)
+					}
 					after = event.Seq
 					fmt.Println(string(b))
 				}

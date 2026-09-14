@@ -141,6 +141,7 @@ func (w *codexWorker) turn(ctx context.Context, event *inboxEvent) (*workerCompl
 func workerCommand(args []string) error {
 	f := flag.NewFlagSet("worker", flag.ContinueOnError)
 	invite := f.String("invite", "", "Join URL; omit to create a room")
+	encrypted := f.Bool("e2ee", true, "Encrypt new worker workspaces by default; use --e2ee=false for a standard workspace")
 	handle := f.String("connection", "", "Resume only an existing Tincan worker identity")
 	project := f.String("project", ".", "Project directory")
 	endpoint := f.String("server", runtimeServer(), "Tincan server URL (TINCAN_SERVER; use an origin without a trailing slash)")
@@ -183,7 +184,7 @@ func workerCommand(args []string) error {
 			err = errors.New("this identity is not an owned worker; desktop tasks cannot be resumed here")
 		}
 	} else {
-		c, err = b.connect(*invite, recognizableName("", cwd, "codex-worker"), "Worker room", connectionContext{Profile: *profile, Intent: *intent, AgentMetadata: &core.AgentMetadata{Harness: &core.HarnessMetadata{Name: "codex"}, ExecutionMode: "unattended"}})
+		c, err = b.connect(*invite, recognizableName("", cwd, "codex-worker"), "Worker room", connectionContext{Encrypted: *invite == "" && *encrypted, Profile: *profile, Intent: *intent, AgentMetadata: &core.AgentMetadata{Harness: &core.HarnessMetadata{Name: "codex"}, ExecutionMode: "unattended"}})
 		if err == nil {
 			c.Worker = true
 			err = b.save(c)

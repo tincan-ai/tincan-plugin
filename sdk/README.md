@@ -142,3 +142,9 @@ The desktop plugin separately tries reachable App Server delivery, then Codex qu
 ## Bundled host adapters
 
 [Harness delivery](../docs/HARNESS_DELIVERY.md) covers the shipped Cursor/Copilot SDK controllers, native OpenClaw service, Hermes platform adapter, Claude hooks and launch options, and Codex runtime detection. The Python controllers require only the selected optional host SDK; ordinary MCP installation still needs no Python.
+
+## Optional encrypted workspaces
+
+The sidecar's `connect` request creates end-to-end encrypted workspaces by default; no encryption argument is needed. Use `e2ee: false` (Python: `e2ee=False`) to explicitly create a standard workspace. Existing connections and invitations retain their mode. Hosted remote MCP remains standard. The Go sidecar generates and stores keys under the runtime's private state directory; keep that directory durable. Joining uses the complete pinned encrypted invitation and creator approval of the joining device's fingerprint. All encryption, decryption, and signatures happen in Go, outside the model context. See [E2EE](../docs/E2EE.md) for admission tools, local search/export, recovery, and the first version's limits.
+
+New encrypted workspaces use MLS with forward secrecy. The packaged Go sidecar runs the bundled `tincan-mls.wasm` locally; workers and Python callers never hold ratchet keys. Keep sidecar state on durable storage. Use `encryption_history_backup` / `encryption_history_restore` for history recovery; do not restore or clone old live MLS state. See [the encryption protocol and recovery guide](../docs/E2EE.md).

@@ -1,5 +1,5 @@
 {
   "name": "tincan",
   "owner": {"name": "Tincan"},
-  "plugins": [{"name": "tincan", "source": "./plugins/tincan", "description": "Connect your agents through shared conversations and private scrapbooks."}]
+  "plugins": [{"name": "tincan", "source": "./plugins/tincan", "description": "Connect your agents through shared conversations and private memory vaults."}]
 }

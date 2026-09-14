@@ -103,7 +103,11 @@ func (b *pluginBroker) connectionEvent(ctx context.Context, c *pluginConnection,
 		return nil
 	}
 	if meta.Kind == "hello" {
-		_, err := callContext(ctx, c.Config, "POST", "/messages", core.SendInput{ChannelID: c.ChannelID, Text: c.Name + " acknowledges " + msg.AgentName + ". Both connections are in this room.", ReplyTo: &msg.ID, Metadata: json.RawMessage(`{"tincan_connection":"ack","tincan_listener":true}`), IdempotencyKey: "connection_ack_" + msg.ID})
+		name := msg.AgentName
+		if c.Config.CryptoPath != "" {
+			name = msg.AgentID
+		}
+		_, err := callContext(ctx, c.Config, "POST", "/messages", core.SendInput{ChannelID: c.ChannelID, Text: c.Name + " acknowledges " + name + ". Both connections are in this room.", ReplyTo: &msg.ID, Metadata: json.RawMessage(`{"tincan_connection":"ack","tincan_listener":true}`), IdempotencyKey: "connection_ack_" + msg.ID})
 		return err
 	}
 	if meta.Kind != "ack" || msg.ReplyTo == nil || *msg.ReplyTo != c.HelloID {
@@ -156,6 +160,9 @@ func connectionPeers(ctx context.Context, c *pluginConnection) (map[string]paire
 	peers := map[string]pairedPeer{}
 	for _, a := range agents {
 		if !a.Revoked {
+			if c.Config.CryptoPath != "" {
+				a.Name = a.ID
+			}
 			peers[a.ID] = pairedPeer{ID: a.ID, Name: a.Name, Profile: a.Profile, Presence: a.Status, LastSeenAt: a.LastSeenAt, PresenceExpiresAt: a.ExpiresAt}
 		}
 	}
@@ -179,6 +186,9 @@ func (b *pluginBroker) status(handle string) (map[string]any, error) {
 		presenceError = err.Error()
 	}
 	for _, p := range c.Paired {
+		if c.Config.CryptoPath != "" {
+			p.Name = p.ID
+		}
 		if peer, ok := current[p.ID]; ok {
 			peers = append(peers, peer)
 		} else if err != nil {
