@@ -74,7 +74,7 @@ func TestOneDelegatedWorkerOwnsRequest(t *testing.T) {
 	if err = i.release(42, winner.Claim); err != nil {
 		t.Fatal(err)
 	}
-	if i.state.Pending == nil || i.state.After != 0 {
+	if i.state.Pending == nil || i.state.After != 42 {
 		t.Fatal("release acknowledged work")
 	}
 	r, err = i.claim(42, "replacement")

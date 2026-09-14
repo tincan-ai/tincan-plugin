@@ -82,11 +82,12 @@ func (b *pluginBroker) deliverCodex(ctx context.Context, c *pluginConnection, pa
 		b.setDelivery(c.Handle, s)
 		return nil
 	}
-	mention := payload["kind"] == "mention" || payload["kind"] == "join_request"
+	mention := payload["kind"] == "mention" || payload["kind"] == "join_request" || payload["kind"] == "approval_needed" || payload["kind"] == "needs_attention"
 	seq, _ := payload["event_seq"].(int64)
+	key, _ := payload["notice_key"].(string)
 	if mention && seq > 0 {
 		var receipt queueReceipt
-		if data, e := os.ReadFile(queuePath(b.root, c.Handle)); e == nil && json.Unmarshal(data, &receipt) == nil && receipt.Seq == seq {
+		if data, e := os.ReadFile(queuePath(b.root, c.Handle)); e == nil && json.Unmarshal(data, &receipt) == nil && receipt.Seq == seq && receipt.Key == key {
 			if receipt.State == "accepted" {
 				s.Method = "codex_queue"
 				s.IdleWake = true
@@ -115,7 +116,7 @@ func (b *pluginBroker) deliverCodex(ctx context.Context, c *pluginConnection, pa
 		s.RetryAfter = time.Now().Add(time.Minute)
 	}
 	if mention && seq > 0 && (tryPush || wasQueue) {
-		if err = b.queueCodex(ctx, c, seq); err == nil {
+		if err = b.queueCodex(ctx, c, seq, key); err == nil {
 			s.Method = "codex_queue"
 			s.IdleWake = true
 			s.QueueError = ""

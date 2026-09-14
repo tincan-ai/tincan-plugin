@@ -273,8 +273,9 @@ func TestInboxOwnerPreservesClaimsAcrossRestart(t *testing.T) {
 	if err := restarted.startBackground(c); err != nil {
 		t.Fatal(err)
 	}
-	status := ownerCall(t, child, "inbox_wait", map[string]any{"connection": c.Handle, "worker_id": "replacement"})
-	if status["status"] != "claimed" {
+	status := ownerCall(t, child, "inbox_requests", map[string]any{"connection": c.Handle})
+	data, _ := json.Marshal(status)
+	if !strings.Contains(string(data), "needs_recovery") {
 		t.Fatal("restart lost the original claim", status)
 	}
 	other := ownerCall(t, child, "inbox_claim", map[string]any{"connection": c.Handle, "seq": 7, "worker_id": "replacement"})

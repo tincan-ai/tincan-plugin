@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "digest": "f66187f98729582847f8cdddd83cdf861c7bc721ae95b2f3e3d524605d79f5e1",
+  "digest": "ee200b0ca157b778679b57c873412c76b4b7e88d68d276c640ef73a41e560876",
   "sources": {
     "tests/fixtures/onboarding/muse-cases.json": "8fda19e08db5e517e1253828d35479ab06f2b24f25ea9032d551499e46386ed8",
     "apps/marketing/src/content/onboarding.ts": "f3d83b7824c4db1507c198fe8c91d9c5dae6eb94e0359c518b38019215f3a7f8",
     "apps/shared/setup-prompt.mjs": "5568de0f571eae84a0bf32f0871c257d11ee0d14717a6599b26daa80d5281b8a",
     "apps/shared/agent-prompts.ts": "66c6633d3e3ba794b20e0163176c45ea9510917a6c7430c925628cbf58b58310",
     "apps/web/src/connection-presets.ts": "eebf7116f1db51743841440124ebf041acb7f08884991b2e18803582439436ac",
-    "internal/core/instructions.go": "adbccfc6eda0be986321bcee5526d1d3ff27e9044096823a65f36c6f6d7c4a54",
+    "internal/core/instructions.go": "f9f3d7321f7495735af279056287aded9619e85aa45a78294d678bbd3520e98d",
     "internal/core/agent-guides/setup.template.md": "97dbab29ac35e667bc1909601a2d0d550cf372911f764b3d78a39d84a33ef419",
     "internal/core/agent-guides/muse.md": "eba716654cbc10062286a2f1e5eb35374595438d27a485d0826222c1dcf9951c",
     "internal/core/agent-guides/install.md": "ccd5fbbd0a04db9e8f2c62cbdba08fd5836836a17a122084a694ca71007351f8",
@@ -16,6 +16,6 @@
     "internal/core/agent-guides/delivery.template.md": "f11b3c99f364cc6a2c959c392a5f918ca98089fed26734768ff8499afc853781",
     "plugins/tincan/skills/tincan-connect/SKILL.md": "22284c9c820a4676fa8c90770e225f12cbb04ae97baa3d3f1369582fbed3fd59",
     "plugins/tincan/skills/tincan-communicate/SKILL.md": "6b8a5a5a0954f29630caf26b9af54704731a7a5726967f993f23b5549217427d",
-    "plugins/tincan/skills/tincan-listen/SKILL.md": "9ead13f276a8fcb8819d0ccdd37be5d37936e87bc431d12ceb308d9f4d5e47aa"
+    "plugins/tincan/skills/tincan-listen/SKILL.md": "ba71b36401d177272c5e28b632858f73b3c8d5d678c35adbaaab2544458204a7"
   }
 }

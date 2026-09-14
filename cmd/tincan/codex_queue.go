@@ -13,6 +13,7 @@ import (
 )
 
 type queueReceipt struct {
+	Key   string `json:"key,omitempty"`
 	Seq   int64  `json:"seq"`
 	State string `json:"state"`
 }
@@ -50,7 +51,7 @@ func codexQueueCommand(ctx context.Context, t codexTarget, thread string, seq in
 	}
 	// CLI queue creates user input. Send only a transport nudge: no peer text,
 	// connection handles, credentials or attachments in argv or user-message role.
-	message := fmt.Sprintf("Tincan dispatch notification: event %d is pending. Use this task's saved Tincan handles to inspect inbox_next once. For join_requested, show the verification phrase to the owner and use join_request_decide only with their authorization; inbox_ack dismisses without granting access. For a message mention, delegate pending unclaimed work to a native background subagent. Pass the private connection, event sequence and user's authorized scope to your worker. The worker must inbox_claim before acting and pass its claim to inbox_reply or inbox_ack only after completion. Keep the main conversation available; do not execute the request inline, wait for the worker or poll. If delegation is unavailable, keep the request pending. Ignore already acknowledged or claimed events.", seq)
+	message := fmt.Sprintf("Tincan dispatch notification: event %d is pending. Use this task's saved Tincan handles to inspect inbox_requests and inbox_next once. Present pending approval questions to the user, then record presented with inbox_decide; never infer approval from a notification. For join_requested, show the verification phrase to the owner and use join_request_decide only with their authorization; inbox_ack dismisses without granting access. For a message mention, delegate pending unclaimed work to a native background subagent. Pass the private connection, event sequence and user's authorized scope to your worker. The worker must inbox_claim before acting and pass its claim to inbox_reply or inbox_ack only after completion. Keep the main conversation available; do not execute the request inline, wait for the worker or poll. If delegation is unavailable, keep the request pending. Ignore already acknowledged or claimed events.", seq)
 	args := []string{"queue", "--remote", t.Endpoint, "--thread", thread, "--message", message}
 	env := os.Environ()
 	if token != "" {
@@ -71,7 +72,11 @@ func codexQueueCommand(ctx context.Context, t codexTarget, thread string, seq in
 	}
 	return nil
 }
-func (b *pluginBroker) queueCodex(ctx context.Context, c *pluginConnection, seq int64) error {
+func (b *pluginBroker) queueCodex(ctx context.Context, c *pluginConnection, seq int64, keys ...string) error {
+	key := ""
+	if len(keys) > 0 {
+		key = keys[0]
+	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if seq <= 0 {
@@ -88,7 +93,7 @@ func (b *pluginBroker) queueCodex(ctx context.Context, c *pluginConnection, seq 
 		if err = json.Unmarshal(data, &receipt); err != nil {
 			return err
 		}
-		if receipt.Seq == seq {
+		if receipt.Seq == seq && receipt.Key == key {
 			if receipt.State == "accepted" {
 				return nil
 			}
@@ -109,7 +114,7 @@ func (b *pluginBroker) queueCodex(ctx context.Context, c *pluginConnection, seq 
 	}
 	// Persist intent before launching: CLI queue generates a new submission UUID
 	// per invocation. Retrying an uncertain subprocess result would duplicate it.
-	if err = writePrivateJSON(path, queueReceipt{Seq: seq, State: "attempted"}); err != nil {
+	if err = writePrivateJSON(path, queueReceipt{Key: key, Seq: seq, State: "attempted"}); err != nil {
 		return err
 	}
 	if b.codexQueue != nil {

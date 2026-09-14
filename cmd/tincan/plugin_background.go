@@ -80,14 +80,18 @@ func (b *pluginBroker) startBackground(c *pluginConnection) error {
 	b.wg.Add(1)
 	go func() {
 		defer b.wg.Done()
-		i.stream(b.runCtx, func(ctx context.Context, event inboxEvent) error { return b.connectionEvent(ctx, saved, event) }, func(ctx context.Context, event *inboxEvent) error {
-			kind := "mention"
-			if event.Kind == "join_requested" {
-				kind = "join_request"
-			}
-			return b.deliver(ctx, saved, map[string]any{"kind": kind, "connection": saved.Handle, "event_seq": event.Seq, "payload": event.Payload})
+		i.stream(b.runCtx, func(ctx context.Context, event inboxEvent) error { return b.connectionEvent(ctx, saved, event) }, nil)
+	}()
+	b.wg.Add(1)
+	go func() {
+		defer b.wg.Done()
+		i.dispatchChanges(b.runCtx, func(ctx context.Context, notice map[string]any) error {
+			notice["connection"] = saved.Handle
+			return b.deliver(ctx, saved, notice)
 		})
 	}()
+	b.wg.Add(1)
+	go func() { defer b.wg.Done(); i.runOutbox(b.runCtx) }()
 	return nil
 }
 
@@ -239,6 +243,9 @@ func (b *pluginBroker) status(handle string) (map[string]any, error) {
 		self.Presence = "unknown"
 	}
 	view := map[string]any{"connection": handle, "agent_id": c.AgentID, "name": c.Name, "paired": len(peers) > 0, "peers": peers, "presence": self.Presence, "last_seen_at": self.LastSeenAt, "presence_expires_at": self.PresenceExpiresAt, "presence_error": presenceError, "background_listener": running, "delivery": delivery, "idle_wake": d.IdleWake, "delivery_diagnostics": d, "delivery_priority": b.deliveryPriorities(), "execution": execution, "stream_state": streamState, "stream_error": streamError}
+	if i != nil {
+		view["commitments"] = i.requests()
+	}
 	b.addHarnessReadiness(view, c)
 	connectionReadiness(view)
 	return view, nil

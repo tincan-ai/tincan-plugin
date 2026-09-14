@@ -8,6 +8,7 @@ import (
 )
 
 func addClaimTools(server *mcp.Server, resolve func(string) (*inbox, error)) {
+	addRequestTools(server, resolve)
 	type claimInput struct {
 		Connection string `json:"connection,omitempty" jsonschema:"Private parent connection for plugin tools; omit for the standalone bridge"`
 		Seq        int64  `json:"seq"`

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"strconv"
 	"sync"
@@ -36,7 +35,10 @@ func (t *channelTransport) Connect(ctx context.Context) (mcp.Connection, error) 
 }
 func (t *channelTransport) notify(ctx context.Context, e *inboxEvent) error {
 	kind := "mention"
-	if e.Kind == "join_requested" {
+	if e.Kind == "approval_needed" || e.Kind == "needs_attention" {
+		kind = e.Kind
+	}
+	if e.Kind == "join_requested" || e.Kind == "join_request" {
 		kind = "join_request"
 	}
 	content, _ := json.Marshal(inboundNotification(map[string]any{"kind": kind, "event_seq": e.Seq}))
@@ -75,40 +77,27 @@ func inboxBridge(c Config) (inboxBridgeOptions, mcp.Transport, func(), error) {
 	return result, transport, cleanup, nil
 }
 func pushInbox(ctx context.Context, i *inbox, notify func(context.Context, *inboxEvent) error) {
-	for ctx.Err() == nil {
-		e, err := i.waitNext(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			fmt.Fprintln(os.Stderr, "Tincan inbox:", err, "(retrying in 5 seconds)")
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(5 * time.Second):
-				continue
-			}
+	i.mu.Lock()
+	i.background = true
+	i.mu.Unlock()
+	run, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := make(chan struct{})
+	go func() { defer close(done); i.stream(run, nil, nil) }()
+	outboxDone := make(chan struct{})
+	go func() { defer close(outboxDone); i.runOutbox(run) }()
+	i.dispatchChanges(run, func(ctx context.Context, n map[string]any) error {
+		seq, _ := n["event_seq"].(int64)
+		// Event kind is a routing hint. Controller reads the private request record.
+		kind := "message"
+		if n["kind"] != "mention" {
+			kind, _ = n["kind"].(string)
 		}
-		if err = notify(ctx, e); err != nil {
-			fmt.Fprintln(os.Stderr, "Tincan channel:", err)
-			return
-		}
-		// Retain pending until a tool explicitly acknowledges it. No additional
-		// notifications queue up while Claude is working or awaiting permission.
-		for {
-			i.mu.Lock()
-			pending := i.state.Pending != nil && i.state.Pending.Seq == e.Seq
-			i.mu.Unlock()
-			if !pending {
-				break
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-i.changed:
-			}
-		}
-	}
+		return notify(ctx, &inboxEvent{Seq: seq, Kind: kind})
+	})
+	cancel()
+	<-done
+	<-outboxDone
 }
 func addInboxTools(server *mcp.Server, i *inbox) {
 	addClaimTools(server, func(_ string) (*inbox, error) { return i, nil })

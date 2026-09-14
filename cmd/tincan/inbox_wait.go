@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -81,26 +82,49 @@ func (i *inbox) waitMention(ctx context.Context, worker string, duration time.Du
 			i.mu.Unlock()
 			return nil, errors.New("inbox closed; stop the delegated listener")
 		}
-		pending, claim, reply := i.state.Pending, i.state.Claim, i.state.Reply
-		if pending != nil && i.accepts(*pending) {
-			result := map[string]any{"event_seq": pending.Seq, "kind": pending.Kind, "experimental": true}
-			switch {
-			case reply != nil:
-				result["status"] = "reply_pending"
-				result["instructions"] = "Stop. A saved reply needs recovery; do not execute this event again."
-			case claim != nil:
-				result["status"] = "claimed"
-				result["worker_id"] = claim.WorkerID
-				result["instructions"] = "Stop. This event already has a worker claim. Resume only the known worker after checking its outcome; never release or rerun uncertain work."
-			case pending.Kind == "join_requested":
+		_ = i.state.migrate()
+		var candidate *inboxRequest
+		for n := range i.state.Requests {
+			r := &i.state.Requests[n]
+			if !i.state.eligible(r) || !i.accepts(r.Event) {
+				continue
+			}
+			if r.Event.Kind == "join_requested" {
+				key := worker + ":join:" + fmt.Sprint(r.Event.Seq)
+				if i.questionNotices == nil {
+					i.questionNotices = map[string]bool{}
+				}
+				if i.questionNotices[key] {
+					continue
+				}
+				i.questionNotices[key] = true
+			}
+			candidate = r
+			break
+		}
+		if r := candidate; r != nil {
+			result := map[string]any{"event_seq": r.Event.Seq, "kind": r.Event.Kind, "experimental": true, "status": "event", "instructions": "Claim this message before acting. Use inbox_outcome to save completion or safely suspend a commitment, then continue listening. Other commitments do not block this message."}
+			if r.Event.Kind == "join_requested" {
 				result["status"] = "owner_review"
-				result["instructions"] = "Read inbox_next once and report the join verification phrase to the parent for owner review, then stop. Leave the request pending; never approve automatically."
-			default:
-				result["status"] = "event"
-				result["instructions"] = "Call inbox_claim with this event_seq and your worker_id. Act only if acquired=true, within the parent's authorized scope. Reply or acknowledge with the claim after completion. Then inbox_wait again within the authorized listening period."
+				result["instructions"] = joinReviewInstructions
 			}
 			i.mu.Unlock()
 			return result, nil
+		}
+		for _, r := range i.state.Requests {
+			if r.Approval == nil || r.Approval.Delivery != "pending" {
+				continue
+			}
+			key := worker + ":" + r.Approval.ID
+			if i.questionNotices == nil {
+				i.questionNotices = map[string]bool{}
+			}
+			if i.questionNotices[key] {
+				continue
+			}
+			i.questionNotices[key] = true
+			i.mu.Unlock()
+			return map[string]any{"status": "decision_needed", "event_seq": r.Event.Seq, "instructions": "Read inbox_requests privately and hand its concrete question to the parent for user presentation. Record presented only after actual delivery. Then continue listening; this commitment alone is suspended."}, nil
 		}
 		if i.updates == nil {
 			i.updates = make(chan struct{})

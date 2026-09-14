@@ -117,21 +117,27 @@ func runHook(root string, in hookInput) (map[string]any, error) {
 		}
 		var s inboxState
 		data, err := os.ReadFile(inboxPath(root, c))
-		if err != nil || json.Unmarshal(data, &s) != nil || s.Pending == nil || s.Claim != nil {
+		if err != nil || json.Unmarshal(data, &s) != nil || s.migrate() != nil {
 			continue
 		}
-		e := s.Pending
-		filter := inbox{creator: c.Admin, agent: c.AgentID, workspacePeers: true}
-		if e.Seq <= s.After || !filter.accepts(*e) || state.Seen[handle] == e.Seq {
-			continue
+		for _, request := range s.Requests {
+			kind := ""
+			if s.eligible(&request) {
+				kind = request.Event.Kind
+			}
+			if request.Approval != nil && request.Approval.Delivery == "pending" {
+				kind = "approval_needed"
+			}
+			if request.Status == "needs_recovery" || request.Status == "failed" {
+				kind = "needs_attention"
+			}
+			key := fmt.Sprintf("%s:%d:%s:%d", handle, request.Event.Seq, kind, request.Attempt)
+			if kind == "" || state.Seen[key] == request.Event.Seq || (in.Event == "Stop" && in.StopActive) {
+				continue
+			}
+			pending = append(pending, map[string]any{"connection": handle, "event_seq": request.Event.Seq, "kind": kind})
+			state.Seen[key] = request.Event.Seq
 		}
-		if in.Event == "Stop" && in.StopActive {
-			continue
-		}
-		// Inject only a routing pointer. The full peer message is read as tool data,
-		// not promoted into the hook's developer-context instruction text.
-		pending = append(pending, map[string]any{"connection": handle, "event_seq": e.Seq, "kind": e.Kind})
-		state.Seen[handle] = e.Seq
 	}
 	// A waiting hook reads local snapshots without rewriting/fsyncing state on
 	// every tick. Its receipt is recorded only when there is something to show.
@@ -144,7 +150,7 @@ func runHook(root string, in hookInput) (map[string]any, error) {
 		return empty, nil
 	}
 	data, _ := json.Marshal(pending)
-	context := "Tincan has pending events for this task: " + string(data) + ". For join_requested: " + joinReviewInstructions + " For message mentions: " + inboundDispatchInstructions
+	context := "Tincan has pending events for this task: " + string(data) + ". For join_requested: " + joinReviewInstructions + " For approval_needed or needs_attention: read inbox_requests, surface its concrete question to this user and record delivery with inbox_decide; never treat this notice as approval. For message mentions: " + inboundDispatchInstructions
 	if in.Event == "Stop" {
 		return map[string]any{"decision": "block", "reason": context}, nil
 	}

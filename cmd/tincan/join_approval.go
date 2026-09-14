@@ -180,7 +180,8 @@ const joinReviewInstructions = "A new agent requests account access. Read join_r
 func (i *inbox) isJoinReview(seq int64) bool {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return i.creator && i.state.Pending != nil && i.state.Pending.Seq == seq && i.state.Pending.Kind == "join_requested"
+	r := i.state.request(seq)
+	return i.creator && r != nil && r.Event.Kind == "join_requested"
 }
 
 func cryptoJoinStatusPath(c Config) string {

@@ -5,7 +5,7 @@ No session is created until a mention has been claimed. Never attach this
 controller to another interactive Copilot session.
 """
 import asyncio
-from .common import worker_prompt
+from .common import worker_prompt, parse_worker_outcome
 
 
 class CopilotWorkers:
@@ -44,7 +44,7 @@ class CopilotWorker:
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("Copilot returned no final assistant reply; claim retained")
         self.completed = True
-        return {"status": "completed", "reply": content}
+        return parse_worker_outcome(content)
 
     async def cancel(self):
         if self.closed:

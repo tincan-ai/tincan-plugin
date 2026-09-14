@@ -24,8 +24,9 @@ import (
 // Each connection has a private capability, published only while holding its
 // inbox lock. No server credential, endpoint argument, or global identity is used.
 type inboxOwnerReference struct {
-	Port   int    `json:"port"`
-	Secret string `json:"secret"`
+	ControllerOnly bool   `json:"controller_only,omitempty"`
+	Port           int    `json:"port"`
+	Secret         string `json:"secret"`
 }
 
 type pluginInboxOwner struct {
@@ -40,7 +41,7 @@ type pluginInboxOwner struct {
 
 func inboxOwnerTool(name string) bool {
 	switch name {
-	case "inbox_wait", "inbox_next", "inbox_claim", "inbox_release", "inbox_reply", "inbox_ack", "tincan_status", "tincan_pairing_wait":
+	case "inbox_plan", "inbox_requests", "inbox_outcome", "inbox_decide", "inbox_policy_set", "inbox_wait", "inbox_next", "inbox_claim", "inbox_release", "inbox_reply", "inbox_ack", "tincan_status", "tincan_pairing_wait":
 		return true
 	}
 	return false
@@ -113,10 +114,10 @@ func (b *pluginBroker) addInboxOwnerRouting(server *mcp.Server) {
 }
 
 // Called with b.mu held, after acquiring and registering the inbox. An owned
-// standalone worker intentionally has no bridge: its completion is staged by
-// its controller, and must not be bypassed by another process.
+// standalone worker exposes only controller operations through its bridge;
+// staged completion cannot be bypassed by another process.
 func (b *pluginBroker) publishInboxOwner(c *pluginConnection) error {
-	if b.toolServer == nil || c.Worker || b.host == "codex-worker" {
+	if b.toolServer == nil {
 		return nil
 	}
 	if b.inboxOwner == nil {
@@ -147,7 +148,7 @@ func (b *pluginBroker) publishInboxOwner(c *pluginConnection) error {
 	if err != nil {
 		return err
 	}
-	ref := inboxOwnerReference{Port: b.inboxOwner.port, Secret: core.ID("")}
+	ref := inboxOwnerReference{ControllerOnly: c.Worker, Port: b.inboxOwner.port, Secret: core.ID("")}
 	data, err := json.Marshal(ref)
 	if err != nil {
 		return err
@@ -192,6 +193,10 @@ func (b *pluginBroker) serveInboxOwner(owner *pluginInboxOwner, w http.ResponseW
 	b.mu.Unlock()
 	if !ok || !live || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+ref.Secret)) != 1 {
 		http.Error(w, "inbox owner unavailable", http.StatusForbidden)
+		return
+	}
+	if ref.ControllerOnly && in.Name != "inbox_requests" && in.Name != "inbox_decide" && in.Name != "inbox_policy_set" && in.Name != "inbox_plan" {
+		http.Error(w, "owned worker bridge only accepts controller decisions", http.StatusForbidden)
 		return
 	}
 	// Body reads are bounded, but the subsequent wait may last an hour.

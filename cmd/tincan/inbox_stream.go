@@ -12,8 +12,8 @@ import (
 )
 
 // stream holds a single SSE request open, with no model involvement or periodic
-// tool calls. Durable cursor + single pending item preserve the existing inbox
-// acknowledgement contract. The stream pauses under backpressure until ack.
+// tool calls. Receipt is persisted independently of work completion. Slow or suspended
+// commitments never hold the SSE reader at the front of the inbox.
 func (i *inbox) stream(ctx context.Context, control func(context.Context, inboxEvent) error, notify func(context.Context, *inboxEvent) error) {
 	delay := time.Second
 	for ctx.Err() == nil {
@@ -43,17 +43,18 @@ func (i *inbox) stream(ctx context.Context, control func(context.Context, inboxE
 func (i *inbox) pendingEvent() (*inboxEvent, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	if i.state.Pending != nil && i.state.Reply != nil {
-		if _, err := i.finishReply(); err != nil {
-			return nil, err
-		}
+	if r := i.state.runnable(); r != nil {
+		e := r.Event
+		return &e, nil
 	}
-	return i.state.Pending, nil
+	return nil, nil
 }
 func (i *inbox) waitAcknowledged(ctx context.Context, seq int64) error {
 	for {
 		i.mu.Lock()
-		pending := i.state.Pending != nil && i.state.Pending.Seq == seq
+		r := i.state.request(seq)
+		pending := r != nil && !terminal(r.Status)
+		updates := i.updates
 		i.mu.Unlock()
 		if !pending {
 			return nil
@@ -61,25 +62,24 @@ func (i *inbox) waitAcknowledged(ctx context.Context, seq int64) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-i.changed:
+		case <-updates:
 		}
 	}
 }
 func (i *inbox) consumeStream(ctx context.Context, control func(context.Context, inboxEvent) error, notify func(context.Context, *inboxEvent) error) error {
-	pending, err := i.pendingEvent()
-	if err != nil {
-		return err
-	}
-	if pending != nil {
-		if notify != nil {
-			if err = notify(ctx, pending); err != nil {
+	// Replay eligible saved notices after restart or a failed notification.
+	i.mu.Lock()
+	saved := i.state.copy()
+	i.mu.Unlock()
+	for _, r := range saved.Requests {
+		if saved.eligible(&r) && notify != nil {
+			e := r.Event
+			if err := notify(ctx, &e); err != nil {
 				return err
 			}
 		}
-		if err = i.waitAcknowledged(ctx, pending.Seq); err != nil {
-			return err
-		}
 	}
+	var err error
 	i.mu.Lock()
 	after := i.state.After
 	i.mu.Unlock()
@@ -126,10 +126,7 @@ func (i *inbox) consumeStream(ctx context.Context, control func(context.Context,
 			return verifyErr
 		}
 		if !valid {
-			i.mu.Lock()
-			err = i.save(inboxState{After: event.Seq})
-			i.mu.Unlock()
-			if err != nil {
+			if _, err = i.ingest(event, false); err != nil {
 				return err
 			}
 			continue
@@ -140,27 +137,16 @@ func (i *inbox) consumeStream(ctx context.Context, control func(context.Context,
 				return err
 			}
 		}
-		i.mu.Lock()
-		accepted := i.accepts(event)
-		if accepted {
-			err = i.save(inboxState{After: i.state.After, Pending: &event})
-		} else {
-			err = i.save(inboxState{After: event.Seq})
-		}
-		i.mu.Unlock()
+		accepted, err := i.ingest(event, true)
 		if err != nil {
 			return err
 		}
-		if accepted {
-			if notify != nil {
-				if err = notify(ctx, &event); err != nil {
-					return err
-				}
-			}
-			if err = i.waitAcknowledged(ctx, event.Seq); err != nil {
+		if accepted && notify != nil {
+			if err = notify(ctx, &event); err != nil {
 				return err
 			}
 		}
+
 	}
 	if err = scan.Err(); err != nil {
 		return err

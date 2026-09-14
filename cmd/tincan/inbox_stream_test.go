@@ -65,19 +65,13 @@ func TestBackgroundSSEStaysOpenAndRecoversPending(t *testing.T) {
 		}
 	}
 	receive(2)
-	// Idle waiting uses one open HTTP stream and no calls back into a model.
-	select {
-	case <-delivered:
-		t.Fatal("did not wait for acknowledgement")
-	case <-time.After(100 * time.Millisecond):
-	}
+	receive(3) // Both messages arrive before either commitment finishes.
 	if requests.Load() != 1 {
 		t.Fatalf("reopened stream while idle: %d", requests.Load())
 	}
 	if err = i.ack(2); err != nil {
 		t.Fatal(err)
 	}
-	receive(3)
 	if requests.Load() != 1 {
 		t.Fatal("reconnected between messages")
 	}

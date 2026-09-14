@@ -56,7 +56,11 @@ async def run(args):
             return
         async def report(notice):
             if notice.get("event") != "handled":
-                print("Tincan needs owner review:", notice.get("event"), notice.get("error", ""), flush=True)
+                approval = notice.get("approval", {})
+                print("Tincan needs owner review:", approval.get("question") or notice.get("error") or notice.get("event"), flush=True)
+                if approval:
+                    print("Decision:", approval["id"], "request:", notice["event_seq"], flush=True)
+                    return {"presented": True}
         if args.host == "copilot":
             async with CopilotClient() as copilot:
                 config = {"working_directory": str(Path(args.project).resolve()),

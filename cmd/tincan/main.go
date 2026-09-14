@@ -245,6 +245,12 @@ func main() {
 		return
 	}
 	cmd := os.Args[1]
+	if cmd == "inbox-control" {
+		if err := inboxControl(os.Args[2:], os.Stdin, os.Stdout); err != nil {
+			fatal(err)
+		}
+		return
+	}
 	if cmd == "claude-wake" {
 		os.Exit(claudeWakeCommand(os.Stdin, os.Stderr))
 	}
@@ -665,6 +671,7 @@ func help() {
   tincan sidecar [--host HOST] [--server URL] [--state-dir PATH]
   tincan worker --project PATH [--invite URL | --connection HANDLE]
   tincan mcp
+  tincan inbox-control --connection HANDLE [--action decide|policy_set|plan] < input.json
   tincan listen --allow-senders AGENT_ID -- COMMAND [ARGS...]
   tincan claude [Claude Code flags]
 

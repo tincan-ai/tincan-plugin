@@ -90,8 +90,8 @@ func TestInboxWaitClaimAndRestartSafety(t *testing.T) {
 	if err != nil || !claim.Acquired {
 		t.Fatal(claim, err)
 	}
-	r, err = i.waitMention(context.Background(), "child", time.Second)
-	if err != nil || r["status"] != "claimed" || r["claim"] != nil {
+	r, err = i.waitMention(context.Background(), "child", time.Millisecond)
+	if err != nil || r["status"] != "expired" || r["claim"] != nil {
 		t.Fatal("wait stole claimed work", r, err)
 	}
 	data, err := os.ReadFile(i.path)
@@ -102,11 +102,11 @@ func TestInboxWaitClaimAndRestartSafety(t *testing.T) {
 	if err := json.Unmarshal(data, &restarted.state); err != nil {
 		t.Fatal(err)
 	}
-	if restarted.waiting() != nil || restarted.state.Claim.Token != claim.Claim {
+	if restarted.waiting() != nil || restarted.state.request(42).Claim.Token != claim.Claim {
 		t.Fatal("restart retained waiter or lost durable claim")
 	}
-	r, err = restarted.waitMention(context.Background(), "replacement", time.Second)
-	if err != nil || r["status"] != "claimed" {
+	r, err = restarted.waitMention(context.Background(), "replacement", time.Millisecond)
+	if err != nil || r["status"] != "expired" {
 		t.Fatal(r, err)
 	}
 	if err := i.ack(42, claim.Claim); err != nil {
@@ -136,7 +136,7 @@ func TestInboxWaitClosedAndOwnerReview(t *testing.T) {
 	i.creator = true
 	saveWaitingEvent(t, i, inboxEvent{Seq: 5, Kind: "join_requested", JoinRequest: &joinNotice{RequestID: "join"}})
 	r, err := i.waitMention(context.Background(), "child", time.Second)
-	if err != nil || r["status"] != "owner_review" || i.state.Claim != nil || i.state.After != 0 {
+	if err != nil || r["status"] != "owner_review" || i.state.Claim != nil || i.state.After != 5 {
 		t.Fatal("join request was executed or acknowledged", r, err)
 	}
 }

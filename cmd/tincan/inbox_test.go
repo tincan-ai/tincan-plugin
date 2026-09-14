@@ -161,7 +161,7 @@ func TestInboxRejectsMissingAllowlistAndRevalidatesPending(t *testing.T) {
 		t.Fatalf("revoked sender replayed: %v %v", e, err)
 	}
 }
-func TestNativePushWaitsForAcknowledgement(t *testing.T) {
+func TestNativePushReceivesWhileWorkIsPending(t *testing.T) {
 	c, _ := fixture(t, []inboxEvent{event(1, "peer", "self"), event(2, "peer", "self")})
 	i, err := openInbox(c, "peer")
 	if err != nil {
@@ -185,20 +185,15 @@ func TestNativePushWaitsForAcknowledgement(t *testing.T) {
 		t.Fatal("no notification")
 	}
 	select {
-	case <-got:
-		t.Fatal("sent another event without acknowledgement")
-	case <-time.After(50 * time.Millisecond):
-	}
-	if err = i.ack(1); err != nil {
-		t.Fatal(err)
-	}
-	select {
 	case seq := <-got:
 		if seq != 2 {
 			t.Fatal(seq)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("no second notification")
+	}
+	if err := i.ack(1); err != nil {
+		t.Fatal(err)
 	}
 	cancel()
 	<-done
@@ -307,6 +302,9 @@ func TestListenHandlerFailureRetainsWork(t *testing.T) {
 	if i.state.Pending == nil {
 		t.Fatal("failed work lost")
 	}
+	if err := i.decision(1, "", "resume", "test operator confirmed subprocess exited", "", true); err != nil {
+		t.Fatal(err)
+	}
 	i.close()
 	t.Setenv("TINCAN_TEST_HANDLER", "ok")
 	if err = listenCommand([]string{"--allow-senders", "peer", "--max-events", "1", "--", os.Args[0], "-test.run=TestHandlerHelper"}); err != nil {
@@ -318,11 +316,13 @@ func TestHandlerHelper(t *testing.T) {
 	case "fail":
 		os.Exit(7)
 	case "ok":
-		var e inboxEvent
-		if json.NewDecoder(os.Stdin).Decode(&e) != nil || e.Seq != 1 {
+		var e struct {
+			Event inboxEvent `json:"event"`
+		}
+		if json.NewDecoder(os.Stdin).Decode(&e) != nil || e.Event.Seq != 1 {
 			os.Exit(8)
 		}
-		fmt.Print("Completed the requested check.")
+		fmt.Print(`{"status":"completed","reply":"Completed the requested check."}`)
 		os.Exit(0)
 	}
 }
