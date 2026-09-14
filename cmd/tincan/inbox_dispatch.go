@@ -30,6 +30,9 @@ func (i *inbox) dispatchChanges(ctx context.Context, notify func(context.Context
 				if r.Event.Kind == "join_requested" {
 					kind = "join_request"
 				}
+				if lifecycleKind(r.Event) != "" {
+					kind = "connection_notice"
+				}
 				key = fmt.Sprintf("%d:ready:%d:%d", r.Event.Seq, r.Attempt, s.Revision)
 			} else if r.Approval != nil && r.Approval.Delivery == "pending" && (r.Status == "awaiting_approval" || r.Status == "awaiting_information") {
 				kind, key = "approval_needed", r.Approval.ID

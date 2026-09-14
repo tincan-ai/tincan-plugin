@@ -106,7 +106,9 @@ func (b *pluginBroker) startPendingJoin(c *pluginConnection) error {
 				notice["setup_error"] = err.Error()
 				notice["next"] = "Retry tincan_connect with this connection handle to finish setup."
 			}
-			_ = b.deliver(b.runCtx, saved, notice)
+			if err != nil {
+				_ = b.deliver(b.runCtx, saved, notice)
+			} // Successful setup is announced by the durable hello.
 			return
 		}
 	}()

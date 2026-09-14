@@ -128,6 +128,9 @@ func (s *inboxState) eligible(r *inboxRequest) bool {
 	if r.Status != "ready" {
 		return false
 	}
+	if lifecycleKind(r.Event) != "" {
+		return true
+	}
 	limit := 4
 	if s.Policy != nil && s.Policy.MaxWorkers > 0 {
 		limit = s.Policy.MaxWorkers

@@ -129,6 +129,9 @@ func runHook(root string, in hookInput) (map[string]any, error) {
 			kind := ""
 			if s.eligible(&request) {
 				kind = request.Event.Kind
+				if lifecycleKind(request.Event) != "" {
+					kind = "connection_notice"
+				}
 			}
 			if request.Approval != nil && request.Approval.Delivery == "pending" {
 				kind = "approval_needed"
@@ -164,7 +167,7 @@ func runHook(root string, in hookInput) (map[string]any, error) {
 		return 1
 	})
 	data, _ := json.Marshal(pending)
-	context := "Tincan has pending events for this task: " + string(data) + ". For join_requested: " + joinReviewInstructions + " For approval_needed or needs_attention: read inbox_requests, surface its concrete question to this user and record delivery with inbox_decide; never treat this notice as approval. For messages (prioritize direct mentions): " + inboundDispatchInstructions
+	context := "Tincan has pending events for this task: " + string(data) + ". For connection_notice: " + lifecycleInstructions + " For join_requested: " + joinReviewInstructions + " For approval_needed or needs_attention: read inbox_requests, surface its concrete question to this user and record delivery with inbox_decide; never treat this notice as approval. For messages (prioritize direct mentions): " + inboundDispatchInstructions
 	if in.Event == "Stop" {
 		return map[string]any{"decision": "block", "reason": context}, nil
 	}

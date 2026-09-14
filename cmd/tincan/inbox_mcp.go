@@ -44,6 +44,9 @@ func (t *channelTransport) notify(ctx context.Context, e *inboxEvent) error {
 	if e.Kind == "join_requested" || e.Kind == "join_request" {
 		kind = "join_request"
 	}
+	if lifecycleKind(*e) != "" {
+		kind = "connection_notice"
+	}
 	content, _ := json.Marshal(inboundNotification(map[string]any{"kind": kind, "event_seq": e.Seq, "mentioned": e.Mentioned}))
 	params, _ := json.Marshal(map[string]any{"content": string(content), "meta": map[string]string{"event_seq": strconv.FormatInt(e.Seq, 10), "channel_id": e.ChannelID, "sender_id": e.Payload.AgentID, "message_id": e.Payload.ID}})
 	return t.conn.Write(ctx, &jsonrpc.Request{Method: "notifications/claude/channel", Params: params})
@@ -119,7 +122,7 @@ func addInboxTools(server *mcp.Server, i *inbox) {
 		Claim string `json:"claim,omitempty"`
 	}
 	mcp.AddTool(server, &mcp.Tool{Name: "inbox_ack", Description: "Acknowledge completed or deliberately skipped work without replying."}, func(_ context.Context, _ *mcp.CallToolRequest, in ackInput) (*mcp.CallToolResult, map[string]any, error) {
-		if in.Claim == "" && !i.isJoinReview(in.Seq) {
+		if in.Claim == "" && !i.isJoinReview(in.Seq) && !i.isConnectionNotice(in.Seq) {
 			return nil, nil, errors.New("delegate this request and call inbox_claim before acknowledging")
 		}
 		return nil, map[string]any{"acknowledged": in.Seq}, i.ack(in.Seq, in.Claim)

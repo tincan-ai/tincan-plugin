@@ -89,7 +89,7 @@ func (i *inbox) waitMention(ctx context.Context, worker string, duration time.Du
 			if !i.state.eligible(r) || !i.accepts(r.Event) {
 				continue
 			}
-			if r.Event.Kind == "join_requested" {
+			if r.Event.Kind == "join_requested" || lifecycleKind(r.Event) != "" {
 				key := worker + ":join:" + fmt.Sprint(r.Event.Seq)
 				if i.questionNotices == nil {
 					i.questionNotices = map[string]bool{}
@@ -104,6 +104,11 @@ func (i *inbox) waitMention(ctx context.Context, worker string, duration time.Du
 		}
 		if r := candidate; r != nil {
 			result := map[string]any{"event_seq": r.Event.Seq, "kind": r.Event.Kind, "mentioned": r.Event.Mentioned, "experimental": true, "status": "event", "instructions": "Claim this message before acting. Use inbox_outcome to save completion or safely suspend a commitment, then continue listening. Other commitments do not block this message."}
+			if lifecycleKind(r.Event) != "" {
+				result["kind"] = "connection_notice"
+				result["status"] = "connection_notice"
+				result["instructions"] = lifecycleInstructions
+			}
 			if r.Event.Kind == "join_requested" {
 				result["status"] = "owner_review"
 				result["instructions"] = joinReviewInstructions

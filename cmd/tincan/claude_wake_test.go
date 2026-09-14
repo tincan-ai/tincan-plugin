@@ -75,9 +75,12 @@ func TestClaudeWakeOwnershipReadinessAndCancellation(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	b := &pluginBroker{root: root, host: "claude", native: true}
-	view := map[string]any{"background_listener": true}
+	view := map[string]any{"background_listener": true, "delivery_diagnostics": deliveryState{Method: "durable_inbox"}}
 	b.addHarnessReadiness(view, c)
 	connectionReadiness(view)
+	if d := view["delivery_diagnostics"].(deliveryState); !d.IdleWake || d.Method != view["delivery"] {
+		t.Fatal("inconsistent diagnostics", view)
+	}
 	if view["delivery"] != "claude_async_rewake" || view["readiness"] != "ready" || !b.runtimeAvailable(ctx, c) {
 		t.Fatal(view)
 	}

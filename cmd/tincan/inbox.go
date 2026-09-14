@@ -214,14 +214,14 @@ func (i *inbox) accepts(e inboxEvent) bool {
 	if e.Kind == "join_requested" {
 		return i.creator && e.JoinRequest != nil && e.JoinRequest.RequestID != ""
 	}
-	if e.Kind != "message" || e.Payload.ID == "" || e.Payload.AgentID == i.agent || (!i.workspacePeers && !slices.Contains(i.allowed, e.Payload.AgentID)) {
+	if e.Kind != "message" || e.Payload.ID == "" || (e.Payload.AgentID == i.agent && lifecycleKind(e) == "") || (!i.workspacePeers && e.Payload.AgentID != i.agent && !slices.Contains(i.allowed, e.Payload.AgentID)) {
 		return false
 	}
 	var meta map[string]json.RawMessage
 	_ = json.Unmarshal(e.Payload.Metadata, &meta)
 	// Replies from this workflow never start another automated turn, even if mentioned.
 	_, automated := meta["tincan_listener"]
-	return !automated
+	return !automated || lifecycleKind(e) != ""
 }
 func (i *inbox) next(ctx context.Context) (*inboxEvent, error) {
 	i.mu.Lock()
@@ -366,6 +366,10 @@ func (i *inbox) reply(seq int64, text string, claim ...string) (any, error) {
 	if err := checkRequestClaim(r, claim); err != nil {
 		i.mu.Unlock()
 		return nil, err
+	}
+	if lifecycleKind(r.Event) != "" {
+		i.mu.Unlock()
+		return nil, errors.New("present this connection notice to the user, then inbox_ack; do not reply to the peer")
 	}
 	if r.Event.Kind == "join_requested" {
 		i.mu.Unlock()

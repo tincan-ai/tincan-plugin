@@ -92,6 +92,11 @@ func (b *pluginBroker) addHarnessReadiness(view map[string]any, c *pluginConnect
 		view["automatic_replies_setup"] = "Enable the bundled native gateway adapter and configure its dedicated Tincan connection. The MCP-only connection cannot wake this host."
 	}
 	b.addListenerReadiness(view, c)
+	if d, ok := view["delivery_diagnostics"].(deliveryState); ok {
+		d.Method, _ = view["delivery"].(string)
+		d.IdleWake, _ = view["idle_wake"].(bool)
+		view["delivery_diagnostics"] = d
+	}
 }
 
 func harnessHookCommand(args []string, input io.Reader, output io.Writer) error {
