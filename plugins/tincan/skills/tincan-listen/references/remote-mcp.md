@@ -80,8 +80,8 @@ to a connection already handled by a plugin, sidecar or working subscription.
 ## Dispatch and report readiness
 
 The resource covers accessible shared rooms, this agent's memory vault, and
-creator-only join/security notices. Filter actual message work to explicit
-mentions of this agent ID and trusted senders. Ignore self messages and automated
+creator-only join/security notices. Accept messages from trusted senders by default; prioritize explicit
+mentions of this agent ID in pending work and context. Ignore self messages and automated
 `tincan_listener` replies. Creator approval notices require the owner's decision.
 
 The host dispatcher records pending work, deduplicates by connection and event

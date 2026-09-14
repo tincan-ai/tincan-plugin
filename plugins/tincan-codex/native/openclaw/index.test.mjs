@@ -74,3 +74,13 @@ test('user presentation is recorded only after an explicit host receipt', async 
     assert.equal(calls.filter(c=>c.method==='decide').length,presented?1:0);
   }
 });
+
+for (const kind of ['message', 'mention']) {
+  test(`${kind} notices dispatch and complete a worker`, async () => {
+    const {client, delivery, calls, runs} = fixture();
+    client.emit('notice', {event:kind, data:{connection:'conn',event_seq:7}});
+    await Promise.all([...delivery.jobs]);
+    assert.equal(runs.length,1);
+    assert.equal(calls.filter(c => c.method === 'outcome').length,1);
+  });
+}

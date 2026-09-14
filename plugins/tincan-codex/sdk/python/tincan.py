@@ -156,7 +156,7 @@ class Tincan:
                     # Account admission needs the owner, never an automatic worker.
                     await self.worker_events.put(event)
                     continue
-                if event.get("event") != "mention":
+                if event.get("event") not in {"mention", "message"}:
                     continue
                 data = event["data"]
                 key = (data["connection"], data["event_seq"])
