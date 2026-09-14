@@ -70,7 +70,7 @@ func TestMCPHandlersUseJSONWireOutputs(t *testing.T) {
 
 // Exercise the SDK boundary, not just inbox.claim, with arbitrary JSON metadata.
 func FuzzMCPClaimMetadata(f *testing.F) {
-	for _, s := range []string{`{}`, `null`, `[]`, `{"nested":[{},null,true,"text"]}`, `"text"`, `42`} {
+	for _, s := range []string{`{}`, `null`, `[]`, `{"nested":[{},null,true,"text"]}`, `"text"`, `42`, `1e1000`} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, metadata string) {

@@ -308,7 +308,11 @@ func (i *inbox) requests() map[string]any {
 			s.Requests[n].Claim.Token = ""
 		}
 	}
-	return map[string]any{"requests": s.Requests, "policy": s.Policy, "controller_version": 2}
+	out, err := inboxWireObject(map[string]any{"requests": s.Requests, "policy": s.Policy, "controller_version": 2})
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	return out
 }
 
 // Controller calls only: decisions require an explicit user/operator source.

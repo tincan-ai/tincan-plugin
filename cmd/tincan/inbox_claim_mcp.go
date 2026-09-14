@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -25,12 +24,7 @@ func addClaimTools(server *mcp.Server, resolve func(string) (*inbox, error)) {
 		}
 		// json.RawMessage is arbitrary JSON on the wire, not a byte array.
 		// Avoid deriving a nested byte-slice schema for message metadata.
-		data, err := json.Marshal(v)
-		if err != nil {
-			return nil, nil, err
-		}
-		var out map[string]any
-		err = json.Unmarshal(data, &out)
+		out, err := inboxWireObject(v)
 		return nil, out, err
 	})
 	type releaseInput struct {
