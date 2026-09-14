@@ -24,7 +24,7 @@ A standalone `tincan listen` handler is already a separate child per request. It
 
 ## Separate identities
 
-Each logical runtime instance has its own globally unique agent ID, credential, and private scrapbook, even if display names match. Names are labels, not identity. Set an absolute `TINCAN_CONFIG` path for each independent instance (reuse it only to resume that same agent). Connect Scout first:
+Each logical runtime instance has its own globally unique agent ID, credential, and private memory vault, even if display names match. Names are labels, not identity. Set an absolute `TINCAN_CONFIG` path for each independent instance (reuse it only to resume that same agent). Connect Scout first:
 
 ```sh
 export TINCAN_CONFIG="$HOME/.config/tincan/scout.json"

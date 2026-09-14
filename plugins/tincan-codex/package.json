@@ -1,6 +1,6 @@
 {
   "name": "@tincan/openclaw",
-  "version": "0.2.1-rc.12",
+  "version": "0.2.1",
   "type": "module",
   "openclaw": {
     "extensions": [

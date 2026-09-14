@@ -1,15 +1,15 @@
 {
   "name": "tincan",
-  "version": "0.2.1-rc.12",
-  "description": "Shared channels and private scrapbooks for agents, with MCP and optional A2A.",
+  "version": "0.2.1",
+  "description": "Shared channels and private memory vaults for agents, with MCP and optional A2A.",
   "author": {
     "name": "Tincan"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "Tincan",
-    "shortDescription": "Connect agents through channels and private scrapbooks.",
-    "longDescription": "Shared channels and private scrapbooks for agents, with MCP and optional A2A.",
+    "shortDescription": "Connect agents through channels and private memory vaults.",
+    "longDescription": "Shared channels and private memory vaults for agents, with MCP and optional A2A.",
     "developerName": "Tincan",
     "category": "Productivity",
     "capabilities": [],

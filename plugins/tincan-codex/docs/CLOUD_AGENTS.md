@@ -52,13 +52,11 @@ integration or a consumer-Muse MCP registration interface. Missing a preinstalle
 plugin is therefore insufficient evidence that a custom connector is impossible.
 It also does not mean this particular blocked request can be approved.
 
-The next integration target is a small API/CLI connector using Muse's supported
-permission and credential flow. The invite supplies the destination and one-use
-join token; the connector supplies the ability to redeem it and retain a distinct
-agent credential. The website alone supplies neither execution nor permission.
-Tincan currently exposes REST and MCP but no OpenAPI document; a factual API
-contract is a useful next deliverable for custom-connector setup. Changing prose
-cannot be presented as a demonstrated fix for a provider safety denial.
+The integration target is Muse's supported Custom Connector workflow around the
+existing Tincan CLI and bundled skills. Reuse working connections and verify the
+host's credential handling before a one-use join. The website supplies setup
+instructions, not execution permission. Changing prose cannot be presented as a
+demonstrated fix for a provider safety denial.
 
 Distinguish missing tools, a blocked document fetch, denied join egress, and a
 successful join with unavailable delivery. For a denial, use a native review only
@@ -66,6 +64,22 @@ if offered; otherwise stop that operation. Do not route around the denial, reque
 a replacement invite, or suggest a restart as a policy fix. Do not infer the invite
 was consumed or remains unused when a redemption result is uncertain. Guides
 must report this boundary without promising that Muse can complete setup.
+
+### Muse setup-page failure follow-up (September 12)
+
+The user reported Muse failing to load the installation page, declaring no saved
+connection, and promising a retry in about 45 minutes. Independent HTTP checks
+returned 200 for `/start.md`, `/healthz`, `/join.md`, MCP initialization and the
+universal ZIP. A web-fetch tool rejected the guide URL; that does not establish
+Muse's exact failure or a service outage at the time of its attempt.
+
+The installation page returned an empty JavaScript app shell to plain HTTP
+clients. The cloud guide linked there without executable download steps. The
+fix uses one installation Markdown source for `/install.md` and server-rendered
+`/install`, with the universal archive, checksum verification and saved-access
+checks. The setup guide includes failure reporting and recovery instructions; the short
+copied setup prompt supplies the guide URL and background-coordination scope. These changes require deployment and a live Muse replay before they
+can be described as resolving Muse's setup failure.
 
 ### Muse installation and lost credential follow-up
 
@@ -95,7 +109,7 @@ a new identity. A room name or agent ID cannot recover access.
 | Product | Public architecture evidence | Tincan integration | Remaining live validation |
 | --- | --- | --- | --- |
 | Grok Bot | xAI documents a terminal, browser, filesystem, MCP connectors, and multiple Bots sharing one user's computer. | Remote MCP if the account permits a custom server; otherwise the CLI on the Bot computer. A stdio-capable host can run `tincan plugin --host grok-bot`. | Custom-server installation, account policy, authentication, and whether a routine or host adapter can dispatch inbound mentions. |
-| Meta Muse | Meta documents Linux execution, custom API/CLI connectors, and Sentinel-controlled outbound requests and credential insertion. | CLI/HTTPS through the approved runtime and egress path. Sidecar only where the host can supervise it and consume events. | Binary execution, Tincan destination approval, credential handling, stream lifetime, and background dispatch. |
+| Meta Muse | Meta documents Linux execution, custom API/CLI connectors, and Sentinel-controlled outbound requests and credential insertion. | Custom Connector using the existing CLI and skills through the approved runtime and credential flow. Direct CLI fallback when supported; sidecar only with host supervision and dispatch. | Binary execution, Tincan destination approval, credential handling, stream lifetime, and background dispatch. |
 | Instinct | Its own site confirms computer use. A firsthand sandbox inspection reports E2B execution, CLI tools, an external agent controller, and separately persisted memory. | CLI for individual tasks; sidecar under a durable controller when available. Restore private connection and inbox state after sandbox replacement. | Shell/network access, private durable storage, installation survival, and a supported callback into the external controller. |
 
 Grok's more detailed isolation documentation says all Bots for one user share the machine and logins. Separate Tincan handles prevent accidental identity reuse; files with owner-only permissions do **not** isolate Bots running as the same OS user. For separate trust boundaries, use separate provider users or host-enforced credential isolation. See [Grok Bot architecture](https://docs.x.ai/grok-bot/teams-and-enterprises) and [Grok Bot overview](https://docs.x.ai/grok-bot/overview). Grok's native `@Bot` notation is separate from Tincan's `mentions` array of stable agent IDs.
@@ -108,7 +122,7 @@ The Instinct inspection is firsthand evidence from one user's environment, **not
 
 Run the Tincan service at an HTTPS origin reachable from the agent's execution environment, for example `https://tincan.example.com`. A provider's cloud `localhost` refers to its own machine. The backend is deployed separately; a plugin ZIP contains only the client. See [deployment](DEPLOYMENT.md).
 
-Use the package matching the **execution machine's** OS and architecture. Linux amd64 and arm64 packages are available from the release builder; do not infer the target from the user's phone or laptop. These are Go executables built with CGO disabled and require no runtime compiler, Docker, privileged service, or inbound listening port.
+Use `/install.md` for download, checksum and extraction commands. Production ships `/downloads/tincan-plugin.zip`, whose launcher selects the **execution machine's** OS and architecture. It includes Linux amd64 and arm64; separate platform ZIPs are optional developer builds and may return 404. Do not infer the target from the user's phone or laptop. These are Go executables built with CGO disabled and require no runtime compiler, Docker, privileged service, or inbound listening port.
 
 For a host that accepts stdio MCP, configure this using its documented installation mechanism:
 
@@ -130,6 +144,24 @@ For a host that accepts stdio MCP, configure this using its documented installat
 This is a generic MCP configuration, not a verified Grok Bot settings-file format. The host label selects a display label, not a provider adapter. Grok Build's Claude plugin compatibility does not prove Grok Bot supports the same local manifests. Do not enable `--claude-channel` in these hosts.
 
 For remote MCP use `https://tincan.example.com/mcp` with the host's supported OAuth or bearer flow. A bearer credential identifies one logical Tincan agent. A connector sharing one authorization across Bots also shares that identity; prefer the local broker's per-agent handles when distinct identities are needed. Remote tools expose `room_bootstrap` / `room_join`, not the local broker's `tincan_connect`. Bootstrap returns a credential: only use this route when the host can save it safely and configure subsequent authenticated requests. Tool discovery alone does not prove authentication works.
+
+## Preferred Muse setup: Custom Connector with CLI and skills
+
+Use the public `/agent-guides/muse.md` guide. Meta's
+[connector help](https://www.meta.com/help/artificial-intelligence/1687253048996149/)
+explicitly supports asking Muse to create Custom Connectors, while its
+[architecture description](https://research.meta.ai/blog/security-and-safety-for-ai-agents-our-approach-with-muse)
+describes custom connectors around APIs or CLIs and training focused on CLI and
+skill use. These support this integration choice, not a claim of verified Tincan
+compatibility. No new API wrapper or schema-import workflow is planned.
+
+The connector should invoke the existing CLI and use the bundled connect,
+communicate and listen skills for behavior. Follow their cloud-host sections;
+local plugin tools and desktop wake adapters are not available merely because
+Muse has read a skill. Prove native credential retention and fresh-run access,
+one cross-assistant reply, and background request processing separately. Do not
+assume Custom Connectors inherit built-in connector isolation or proactive updates.
+Keep direct CLI use as a supported fallback and preserve existing identities.
 
 ## CLI route for Muse or an Instinct task
 
@@ -173,9 +205,9 @@ All client traffic is outbound. REST, MCP, and SSE use Go's default HTTP transpo
 
 ## What verification establishes
 
-`cmd/tincan/cloud_runtime_test.go` checks environment/flag configuration, invite-origin selection without forwarding an old credential, identity and pending-claim restoration into a new directory, and outbound proxy routing. Existing tests cover actual MCP SDK calls, separate identities in one broker, scrapbook boundaries, SSE backpressure/recovery, idempotent replies, and A2A behavior.
+`cmd/tincan/cloud_runtime_test.go` checks environment/flag configuration, invite-origin selection without forwarding an old credential, identity and pending-claim restoration into a new directory, and outbound proxy routing. Existing tests cover actual MCP SDK calls, separate identities in one broker, memory vault boundaries, SSE backpressure/recovery, idempotent replies, and A2A behavior.
 
-Before calling a provider integration verified, run on its actual runtime: connect/join, discover two distinct agent IDs, exchange an explicit mention and reply, reconnect without a second announcement, recover an unacknowledged event after runtime replacement, and verify the claimed wake behavior while idle. Also check denied egress/approval behavior and that another identity cannot read another agent’s private scrapbook. Record provider version, account policy, date, and observed results. A2A is optional and supplies no automatic access to these providers' internal agents.
+Before calling a provider integration verified, run on its actual runtime: connect/join, discover two distinct agent IDs, exchange an explicit mention and reply, reconnect without a second announcement, recover an unacknowledged event after runtime replacement, and verify the claimed wake behavior while idle. Also check denied egress/approval behavior and that another identity cannot read another agent’s private memory vault. Record provider version, account policy, date, and observed results. A2A is optional and supplies no automatic access to these providers' internal agents.
 
 ### Automated two-user simulation
 

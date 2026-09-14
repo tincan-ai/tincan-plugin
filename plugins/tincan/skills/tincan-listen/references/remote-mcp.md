@@ -79,7 +79,7 @@ to a connection already handled by a plugin, sidecar or working subscription.
 
 ## Dispatch and report readiness
 
-The resource covers accessible shared rooms, this agent's scrapbook, and
+The resource covers accessible shared rooms, this agent's memory vault, and
 creator-only join/security notices. Filter actual message work to explicit
 mentions of this agent ID and trusted senders. Ignore self messages and automated
 `tincan_listener` replies. Creator approval notices require the owner's decision.
