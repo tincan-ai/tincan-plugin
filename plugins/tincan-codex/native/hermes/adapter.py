@@ -9,7 +9,7 @@ from gateway.config import Platform
 from gateway.platforms.base import BasePlatformAdapter, SendResult
 from gateway.platforms.event import MessageEvent
 from ...sdk.python.tincan import Tincan
-from ...sdk.python.adapters.common import serve, worker_prompt
+from ...sdk.python.adapters.common import serve, worker_prompt, parse_worker_outcome
 
 log = logging.getLogger(__name__)
 
@@ -69,6 +69,7 @@ class TincanAdapter(BasePlatformAdapter):
                 await self.client.close()
                 return False
             self.connection = view["connection"]
+            await self.client.call("policy_set", connection=self.connection, policy={"source":"operator-provided Hermes configuration scope","scope":self.scope})
             self.task = asyncio.create_task(serve(self.client, self.connection, self.spawn_worker, self.report))
             self.task.add_done_callback(self._dispatcher_done)
             self._mark_connected()
@@ -84,7 +85,10 @@ class TincanAdapter(BasePlatformAdapter):
 
     async def report(self, notice):
         if notice.get("event") != "handled":
-            log.warning("Tincan needs owner review: %s", notice.get("event"))
+            approval = notice.get("approval", {})
+            log.warning("Tincan needs owner review: %s", approval.get("question", notice.get("event")))
+            # Logs are recoverable diagnostics, not proof of user presentation.
+            return {"presented": False}
 
     async def spawn_worker(self, job):
         chat_id = "tincan-" + job["worker_id"]
@@ -113,7 +117,12 @@ class TincanAdapter(BasePlatformAdapter):
         future = self.jobs.get(event.source.chat_id)
         if future is None or future.done() or not text_content.strip() or is_ephemeral_response:
             return SendResult(success=False, error="No active Tincan completion claim"), self
-        future.set_result({"status": "completed", "reply": text_content})
+        try:
+            outcome = parse_worker_outcome(text_content)
+        except RuntimeError as error:
+            future.set_exception(error)
+            return SendResult(success=False, error=str(error)), self
+        future.set_result(outcome)
         return SendResult(success=True, message_id=str(event.message_id)), self
 
     async def send(self, chat_id, content, reply_to=None, metadata=None):

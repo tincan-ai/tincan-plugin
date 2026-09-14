@@ -88,10 +88,13 @@ class Tincan:
             raise ValueError("max_workers must be positive")
         capacity = asyncio.Semaphore(max_workers)
         active = set()
+        dirty = set()
         tasks = set()
 
         async def dispatch(key):
             worker = None
+            claimed = None
+            committed = False
             try:
                 async with capacity:
                     worker_id = "tincan-" + uuid.uuid4().hex
@@ -101,28 +104,31 @@ class Tincan:
                         return
                     job = {"connection": key[0], "event_seq": key[1],
                            "worker_id": worker_id, "event": claimed["event"],
-                           "execution": "background_delegate"}
+                           "execution": "background_delegate", "context": claimed.get("context", ""),
+                           "policy": claimed.get("policy"), "related_commitments":claimed.get("related_commitments",[])}
                     # The host, not asyncio itself, provides model isolation.
                     worker = await spawn_worker(job)
                     if worker.execution_mode not in {"subagent", "subprocess", "isolated_session"}:
                         raise RuntimeError("host must launch an isolated background worker")
                     result = await worker.wait()
-                    if not isinstance(result, dict) or result.get("status") != "completed":
-                        raise RuntimeError("worker did not confirm completion")
-                    params = {"connection": key[0], "seq": key[1],
-                              "claim": claimed["claim"]}
-                    reply = result.get("reply")
-                    if reply is None:
-                        await self.call("ack", **params)
-                    elif isinstance(reply, str) and reply.strip():
-                        await self.call("reply", text=reply, **params)
-                    else:
-                        raise RuntimeError("worker reply must be nonempty text or omitted")
-                    await self.worker_events.put({"event": "handled", "connection": key[0],
-                                                  "event_seq": key[1]})
+                    if not isinstance(result, dict) or result.get("status") not in {
+                        "completed", "awaiting_approval", "awaiting_information", "failed", "needs_recovery"
+                    }:
+                        raise RuntimeError("worker did not return a structured outcome")
+                    await self.call("outcome", connection=key[0], seq=key[1],
+                                    claim=claimed["claim"], outcome=result)
+                    committed = True
+                    await self.worker_events.put({"event": "handled" if result["status"] == "completed" else "approval_needed" if result["status"].startswith("awaiting_") else "needs_attention",
+                                                  "connection": key[0], "event_seq": key[1]})
             except asyncio.CancelledError:
                 raise
             except Exception as error:
+                if claimed and claimed.get("acquired") and not committed:
+                    try:
+                        await self.call("outcome", connection=key[0], seq=key[1], claim=claimed["claim"],
+                                        outcome={"status":"needs_recovery", "context":str(error)})
+                    except Exception:
+                        pass  # The original durable claim still prevents unsafe retry.
                 # Keep the durable claim: an uncertain worker must not be retried
                 # while it could still be applying side effects.
                 await self.worker_events.put({"event": "needs_attention", "connection": key[0],
@@ -137,13 +143,16 @@ class Tincan:
                         await self.worker_events.put({"event": "needs_attention", "connection": key[0],
                                                       "event_seq": key[1], "error": str(error)})
                 active.discard(key)
+                if key in dirty:
+                    dirty.discard(key)
+                    await self.events.put({"event":"mention","data":{"connection":key[0],"event_seq":key[1]}})
 
         try:
             while True:
                 event = await self.events.get()
                 if event.get("event") == "closed":
                     raise RuntimeError(event.get("error", "Tincan sidecar closed"))
-                if event.get("event") in {"join_request", "join_status"}:
+                if event.get("event") in {"join_request", "join_status", "approval_needed", "needs_attention"}:
                     # Account admission needs the owner, never an automatic worker.
                     await self.worker_events.put(event)
                     continue
@@ -152,6 +161,7 @@ class Tincan:
                 data = event["data"]
                 key = (data["connection"], data["event_seq"])
                 if key in active:
+                    dirty.add(key)
                     continue
                 active.add(key)
                 task = asyncio.create_task(dispatch(key))

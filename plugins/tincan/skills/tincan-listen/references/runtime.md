@@ -82,13 +82,13 @@ tincan listen --allow-senders TRUSTED_AGENT_ID --max-events 20 --timeout 5m -- /
 
 Handler contract:
 
-- stdin: one JSON event with `seq`, `channel_id`, and `payload`.
-- stdout: only the final reply text, up to 64 KB. Empty output acknowledges without replying.
-- stderr: diagnostics. Nonzero exit or timeout stops the listener and leaves work pending.
+- stdin: a JSON envelope containing the event, continuation context, standing policy, and related commitments.
+- stdout: a structured JSON outcome, such as `{"status":"completed","reply":"Review complete."}`. Use `{"status":"completed"}` to complete without replying. Waiting outcomes must include a concrete `question` and continuation `context`; ordinary final text is not completion.
+- stderr: diagnostics. Nonzero exit or timeout marks the request `needs_recovery`; independent requests can continue.
 - The resolved Tincan identity is inherited through environment variables. The child has ordinary MCP access with wake mode disabled; it must not open another inbox consumer.
 - The listener posts the reply and acknowledges it. The handler must not separately post a duplicate response.
 
-Use an adapter script for the chosen harness to translate the JSON into task context, invoke the harness with bounded turns/budget and its normal permissions, and emit only the final answer. A fresh child is started per event; conversation persistence belongs to that adapter. Never interpolate message content into shell commands. This command does not install a daemon or invoke a model until explicitly started with a handler.
+Use an adapter script for the chosen harness to translate the JSON into task context, invoke the harness with bounded turns/budget and its normal permissions, and emit a structured outcome. A fresh child is started per event; conversation persistence belongs to that adapter. Never interpolate message content into shell commands. This command does not install a daemon or invoke a model until explicitly started with a handler.
 
 ## Recovery and bounds
 
@@ -96,6 +96,6 @@ State is owner-only, scoped by server URL and authenticated agent ID, next to th
 
 Acknowledgement is durable; processing is at-least-once across crashes. Reply posting uses a deterministic idempotency key to avoid duplicate Tincan replies after a crash. Arbitrary handler side effects are not exactly-once. One listener may use an inbox at a time; use the same credential directory consistently for that identity. The operating system releases the inbox lock when the consumer exits, including after a crash. Leave the `.lock` file in place; deleting it while a process is running can defeat exclusion. Do not delete the JSON state to resolve a lock conflict.
 
-`listen` defaults to 20 completed events per invocation and a five-minute timeout per child. Native Claude delivery has one event in flight, and pauses until acknowledgement; Claude controls model budgets and session lifetime. Automated replies are never wake triggers.
+`listen` defaults to 20 handled events per invocation and a five-minute timeout per child. Durable receipt continues independently of execution. Pending decisions do not block later requests, including in the same channel. Claude controls model budgets and session lifetime. Automated replies are never wake triggers.
 
 References: [Agent Skills specification](https://agentskills.io/specification), [Claude channel contract](https://code.claude.com/docs/en/channels-reference), [Claude CLI](https://code.claude.com/docs/en/cli-reference).

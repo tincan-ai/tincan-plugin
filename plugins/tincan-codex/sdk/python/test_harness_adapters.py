@@ -1,4 +1,5 @@
 import asyncio
+import json
 import importlib
 import sys
 import types
@@ -7,13 +8,13 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 from adapters.copilot import CopilotWorkers
-from adapters.common import serve, worker_prompt
+from adapters.common import serve, worker_prompt, parse_worker_outcome
 from test_tincan import FakeClient
 
 
 class CopilotTests(unittest.IsolatedAsyncioTestCase):
     async def test_dispatch_completion_dedup_and_failure(self):
-        session = types.SimpleNamespace(send_and_wait=AsyncMock(return_value=types.SimpleNamespace(data=types.SimpleNamespace(content="done"))), abort=AsyncMock(), disconnect=AsyncMock())
+        session = types.SimpleNamespace(send_and_wait=AsyncMock(return_value=types.SimpleNamespace(data=types.SimpleNamespace(content=json.dumps({"status":"completed","reply":"done"})))), abort=AsyncMock(), disconnect=AsyncMock())
         host = types.SimpleNamespace(create_session=AsyncMock(return_value=session))
         workers = CopilotWorkers(host, scope="Review changes", session_config={"on_permission_request": lambda *_: None})
         client = FakeClient()
@@ -82,7 +83,7 @@ class CursorTests(unittest.IsolatedAsyncioTestCase):
         run.cancel.assert_awaited_once()
         agent.close.assert_awaited_once()
         run.status = "finished"
-        run.wait.return_value = types.SimpleNamespace(status="finished", result="done")
+        run.wait.return_value = types.SimpleNamespace(status="finished", result=json.dumps({"status":"completed","reply":"done"}))
         worker = await factory({"event": {}})
         self.assertEqual(await worker.wait(), {"status": "completed", "reply": "done"})
         await worker.cancel()
@@ -134,7 +135,7 @@ class HermesTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(worker.future.done())
         await adapter.send(event.source.chat_id, "working")
         self.assertFalse(worker.future.done())
-        await adapter.send_final_ledgered(event, "session", "done", {}, reply_to="7")
+        await adapter.send_final_ledgered(event, "session", json.dumps({"status":"completed","reply":"done"}), {}, reply_to="7")
         self.assertEqual(await worker.wait(), {"status": "completed", "reply": "done"})
         result, _ = await adapter.send_final_ledgered(event, "session", "duplicate", {}, reply_to="7")
         self.assertFalse(result.success)
@@ -147,3 +148,20 @@ class HermesTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class OutcomeContractTests(unittest.TestCase):
+    def test_plain_final_response_is_not_completion(self):
+        for text in ["done", "I need your permission", '{"status":"queued"}', '{"status":"awaiting_approval"}']:
+            with self.assertRaises(RuntimeError):
+                parse_worker_outcome(text)
+
+    def test_waiting_outcomes_preserve_context(self):
+        for status in ["awaiting_approval", "awaiting_information", "needs_recovery", "failed"]:
+            outcome={"status":status,"question":"May I proceed?","context":"saved progress"}
+            self.assertEqual(parse_worker_outcome(json.dumps(outcome)), outcome)
+
+    def test_current_policy_and_context_reach_worker(self):
+        prompt=worker_prompt({"event":{},"policy":{"scope":"Read only","boundaries":["no writes"]},"context":"corrected denominator"},"old broad scope")
+        self.assertIn("Read only",prompt)
+        self.assertIn("corrected denominator",prompt)
+        self.assertNotIn("old broad scope",prompt)

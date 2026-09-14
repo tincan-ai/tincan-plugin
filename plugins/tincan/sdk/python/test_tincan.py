@@ -10,6 +10,7 @@ class FakeClient(Tincan):
         self.worker_events = asyncio.Queue()
         self.claimed = {}
         self.completed = []
+        self.outcomes = {}
         self.claim_calls = asyncio.Queue()
 
     async def call(self, method, **params):
@@ -21,9 +22,14 @@ class FakeClient(Tincan):
             self.claimed[key] = "secret-claim"
             return {"acquired": True, "claim": "secret-claim",
                     "event": {"seq": key[1], "payload": {"text": "peer body"}}}
-        if method in {"reply", "ack"}:
-            assert params["claim"] == self.claimed.pop(key)
-            self.completed.append(key)
+        if method == "outcome":
+            assert params["claim"] == self.claimed[key]
+            self.outcomes[key] = params["outcome"]
+            if params["outcome"]["status"] == "completed":
+                self.claimed.pop(key)
+                self.completed.append(key)
+            elif params["outcome"]["status"] != "needs_recovery":
+                self.claimed.pop(key)
             return {}
         raise AssertionError(method)
 
@@ -105,7 +111,7 @@ class DispatcherTests(unittest.IsolatedAsyncioTestCase):
 
         async def spawn(job):
             worker = Worker()
-            worker.result.set_result({"status": "failed"})
+            worker.result.set_result({"status": "needs_recovery"})
             return worker
 
         dispatcher = asyncio.create_task(client.dispatch_mentions(spawn))
@@ -126,6 +132,49 @@ class DispatcherTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(RuntimeError):
             await dispatcher
         self.assertFalse(client.completed)
+
+    async def test_waiting_outcome_does_not_block_next_message(self):
+        client = FakeClient()
+        async def spawn(job):
+            worker = Worker()
+            worker.result.set_result({"status":"awaiting_approval","question":"May I inspect data?","context":"review"} if job["event_seq"] == 1 else {"status":"completed","reply":"answer"})
+            return worker
+        dispatcher = asyncio.create_task(client.dispatch_mentions(spawn, max_workers=1))
+        await client.mention(seq=1)
+        notice = await asyncio.wait_for(client.worker_events.get(), 1)
+        self.assertEqual(notice["event"], "approval_needed")
+        self.assertNotIn(("conn",1), client.completed)
+        await client.mention(seq=2)
+        notice = await asyncio.wait_for(client.worker_events.get(), 1)
+        self.assertEqual(notice["event"], "handled")
+        self.assertEqual(client.completed, [("conn",2)])
+        await self.stop(dispatcher)
+
+    async def test_approval_arriving_during_worker_cleanup_is_not_lost(self):
+        client = FakeClient()
+        cleanup = asyncio.Event()
+        attempts = []
+        async def spawn(job):
+            worker = Worker()
+            attempts.append(job)
+            if len(attempts) == 1:
+                worker.result.set_result({"status":"awaiting_approval","question":"May I proceed?"})
+                worker.cancel = cleanup.wait
+            else:
+                worker.result.set_result({"status":"completed"})
+            return worker
+        dispatcher = asyncio.create_task(client.dispatch_mentions(spawn))
+        await client.mention()
+        await asyncio.wait_for(client.worker_events.get(), 1)
+        # Simulate the controller's ready notice after a real user decision,
+        # arriving before the previous worker has finished cleanup.
+        await client.mention()
+        await asyncio.sleep(0)
+        cleanup.set()
+        notice = await asyncio.wait_for(client.worker_events.get(), 1)
+        self.assertEqual(notice["event"], "handled")
+        self.assertEqual(len(attempts), 2)
+        await self.stop(dispatcher)
 
     async def test_capacity_and_cancellation(self):
         client = FakeClient()

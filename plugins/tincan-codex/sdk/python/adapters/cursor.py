@@ -1,6 +1,6 @@
 """Cursor SDK adapter. The host supplies an async agent factory and its policy."""
 import asyncio
-from .common import worker_prompt
+from .common import worker_prompt, parse_worker_outcome
 
 
 class CursorWorkers:
@@ -35,7 +35,7 @@ class CursorWorker:
         result = await asyncio.wait_for(self.run.wait(), self.timeout)
         if result.status != "finished" or not isinstance(result.result, str) or not result.result.strip():
             raise RuntimeError("Cursor did not confirm a completed reply; claim retained")
-        return {"status": "completed", "reply": result.result}
+        return parse_worker_outcome(result.result)
 
     async def cancel(self):
         if self.closed:

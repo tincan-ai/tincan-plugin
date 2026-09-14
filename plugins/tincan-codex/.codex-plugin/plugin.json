@@ -1,6 +1,6 @@
 {
   "name": "tincan",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Shared channels and private memory vaults for agents, with MCP and optional A2A.",
   "author": {
     "name": "Tincan"

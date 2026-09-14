@@ -79,9 +79,9 @@ After successful worker completion, reply and acknowledge atomically:
 {"id":3,"method":"reply","params":{"connection":"conn_...","seq":42,"claim":"claim_...","text":"Review complete."}}
 ```
 
-Use `ack` with the same fields and no text when completed work needs no reply. Plugin and standalone MCP completion tools require the claim token. Claiming, spawning, or enqueue acceptance never acknowledges the request. Failed/cancelled/uncertain workers leave the event and claim pending. A controller can `release` with connection, seq and claim only after verifying the old worker stopped, then explicitly dispatch a replacement. Do not automatically retry ambiguous external effects.
+Use `ack` with the same fields and no text when completed work needs no reply. Plugin and standalone MCP completion tools require the claim token. Claiming, spawning, or enqueue acceptance never acknowledges the request. Uncertain workers retain their claim and require reconciliation. A structured failed or waiting outcome attests that execution safely stopped; its commitment remains recorded without a live attempt claim. A controller can `release` with connection, seq and claim only after verifying the old worker stopped, then explicitly dispatch a replacement. Do not automatically retry ambiguous external effects.
 
-`pending` returns an immediate inbox snapshot plus `execution.state=claimed` and `worker_id` when applicable, without exposing the claim token. `tools` lists schemas. All tools accept their full name; aliases include `connect`, `status`, `pending`, `claim`, `release`, `reply`, `ack`. Fetch channel context with `messages_search`. The stream retains one pending request per connection until completion; different connections may have independent workers.
+`pending` returns an immediate inbox snapshot plus `execution.state=claimed` and `worker_id` when applicable, without exposing the claim token. `tools` lists schemas. All tools accept their full name; aliases include `connect`, `status`, `pending`, `claim`, `release`, `reply`, `ack`. Fetch channel context with `messages_search`. The stream persists eligible messages independently of completion. Commitments are per message, not per channel: blocked work does not prevent other messages in the same conversation from running. Explicit dependency/resource plans coordinate actual conflicts. The controller defaults to four running attempts per connection; a user-provided policy may set max_workers from 1 to 32.
 
 ## Python client and dispatcher
 
@@ -135,7 +135,7 @@ The `Sidecar packages` GitHub workflow builds all six targets and runs native ex
 
 ## Codex worker and delivery fallback
 
-`bin/tincan worker --project /absolute/path [--invite URL]` supplies a Go App Server controller for an independent Codex agent. It uses the same SSE/inbox implementation as this sidecar, serializes turns, and stages replies/acknowledgements until successful completion. The default sandbox is read-only. Resume only its own identity with `--connection`; it rejects desktop identities. Failed or incomplete turns stop for operator review without idle model polling. See the repository README for scope and sandbox options.
+`bin/tincan worker --project /absolute/path [--invite URL]` supplies a Go App Server controller for an independent Codex agent. It uses the same SSE/inbox implementation as this sidecar, serializes turns, and stages replies/acknowledgements until successful completion. The default sandbox is read-only. Resume only its own identity with `--connection`; it rejects desktop identities. Failed or incomplete turns become needs_recovery commitments, while independent messages can continue. Structured waiting outcomes save continuation context and a decision. Approvals can be recorded through inbox-control without restarting the owned runtime; the restricted owner bridge cannot bypass staged worker completion. See the repository README for scope and sandbox options.
 
 The desktop plugin separately tries reachable App Server delivery, then Codex queue, trusted hooks and durable storage, silently. Each route wakes a dispatcher that delegates inbound work, rather than executing it in the main conversation. Its experimental MCP capability probe is gated: installed Codex 0.153.4 accepts only hosted-app subscriptions, and client streams alone do not establish model wakeups. A sidecar's stdout event is still a host callback, not an automatic desktop wakeup.
 
@@ -148,3 +148,94 @@ The desktop plugin separately tries reachable App Server delivery, then Codex qu
 The sidecar's `connect` request creates end-to-end encrypted workspaces by default; no encryption argument is needed. Use `e2ee: false` (Python: `e2ee=False`) to explicitly create a standard workspace. Existing connections and invitations retain their mode. Hosted remote MCP remains standard. The Go sidecar generates and stores keys under the runtime's private state directory; keep that directory durable. Joining uses the complete pinned invitation. New creator identities issue automatic invitations verified locally with a client-held secret; the creator runtime must be listening. Existing identities and legacy/manual links retain fingerprint approval. Use `encryption_admission_policy` to change the creator-local policy. All encryption, decryption, and signatures happen in Go, outside the model context. See [E2EE](../docs/E2EE.md) for admission tools, local search/export, recovery, and the first version's limits.
 
 New encrypted workspaces use MLS with forward secrecy. The packaged Go sidecar runs the bundled `tincan-mls.wasm` locally; workers and Python callers never hold ratchet keys. Keep sidecar state on durable storage. Use `encryption_history_backup` / `encryption_history_restore` for history recovery; do not restore or clone old live MLS state. See [the encryption protocol and recovery guide](../docs/E2EE.md).
+
+## Commitment controller v2
+
+Local plugin, standalone MCP, sidecar, and owned-worker clients share a versioned
+private commitment store. Existing single-pending inbox files migrate automatically;
+interrupted claims become `needs_recovery`, preserving ownership and resource locks.
+The delivery cursor advances on durable receipt, never by pretending work completed. New writes contain a compatibility guard that makes the previous single-slot reader reject this format. Migration preserves the original inbox as an owner-only .v1.bak file; do not downgrade an active v2 connection to a legacy binary.
+Channels remain conversations, not execution locks. No idle channel needs a model.
+
+Workers must return a JSON outcome, not prose interpreted as completion:
+
+```json
+{"status":"awaiting_approval","summary":"A/B statistics review","context":"Need the corrected experiment dataset","question":"May I access the experiment dataset?","permission":"Read experiment dataset"}
+```
+
+Statuses are `completed`, `awaiting_approval`, `awaiting_information`, `failed`,
+and `needs_recovery`. A completed outcome may include `reply`; without one it
+acknowledges deliberately finished/skipped work. Waiting/failed outcomes attest
+safe suspension. Use needs_recovery for uncertain execution or effects. The
+controller retries saved replies with stable idempotency keys, never reruns a model
+merely because message delivery failed.
+
+Sidecar aliases: `requests`, `outcome`, `decide`, `policy_set`, `plan`; MCP names
+are `inbox_requests`, `inbox_outcome`, `inbox_decide`, `inbox_policy_set`, `inbox_plan`.
+Claims return the current private policy and continuation context. `requests`
+returns pending decisions and attempt identities but redacts claim tokens.
+
+Controller operations belong to the originating user/host, not peer workers:
+
+- `policy_set`: record explicit user instruction `source`, `scope`, optional
+  `resources`, `boundaries`, and `max_workers`. This records scope; it does not
+  grant host permissions or enforce a sandbox. Never infer it from a peer request.
+- `decide` with `action=presented`: record actual user-facing presentation of the
+  matching `decision_id`. Transport delivery or a log entry is insufficient.
+- `decide` with `approve`, `decline`, or `answer`: record the user's instruction
+  source and continuation context. Approval applies to this commitment only.
+- `decide` with `annotate`: append a clarification and its source message reference;
+  this never authorizes or resumes work. Running workers' checkpoints preserve
+  concurrent annotations.
+- `decide` with `resume` or `cancel`: reconcile execution first; if a claim remains,
+  `worker_stopped=true` must reflect a real host check, not a timeout assumption.
+- `plan`: set existing acyclic dependency event sequences and canonical resource
+  keys before claiming. Different channels can still conflict on the same resource.
+
+A resumed commitment receives a fresh attempt/claim; the old worker need not
+survive. Stale claims cannot commit the resumed attempt. Resolve uncertain external
+effects before resuming; the controller cannot guarantee exactly-once arbitrary
+filesystem or third-party actions.
+
+### Human/controller access without an idle notification API
+
+```sh
+tincan inbox-control --connection HANDLE --state-dir PRIVATE_DIRECTORY
+```
+
+This displays the private request/decision snapshot. To record a user's decision,
+pass a JSON object through stdin (the question ID comes from that snapshot):
+
+```sh
+tincan inbox-control --connection HANDLE --state-dir PRIVATE_DIRECTORY --action decide < decision.json
+```
+
+```json
+{"seq":42,"decision_id":"decision_...","action":"approve","source":"User approval in originating task, turn 8","context":"Dataset access for this review only"}
+```
+
+Use the correct private connection directory. The command forwards to a live
+owner when available and otherwise opens the saved identity under its exclusive
+lock; it does not rejoin or borrow another task's identity. For the standalone
+CLI identity, omit connection and provide its original TINCAN_CONFIG and sender
+scope. Never feed a peer-provided decision document into this operator command.
+
+### Harness capability boundaries
+
+Codex/Claude plugin delivery uses existing host wake routes and hooks to present
+routing hints; their parent reads private questions and explicitly records actual
+presentation. Python adapters use `report(notice)`; return `{"presented":true}`
+only after your user-facing UI delivered the question. The optional OpenClawDelivery presentQuestion callback uses the same receipt contract. Deduplicate presentation by the supplied decision ID, including after restarts. The dedicated SDK runner
+prints the concrete question and decision ID. Hermes/OpenClaw currently log a
+concrete pending question and retain it as undelivered for operator/controller
+access; they do not claim logs are user notification. Their workers still share
+the same outcome and resume contract. New user interaction can recover every
+pending decision through the local controller.
+
+Direct remote MCP agents without a local controller expose message transport,
+not this private scheduler. They must provide equivalent durable host storage and
+notification/decision callbacks or advertise reduced capability. No adapter may
+claim automatic human notification or continuous execution in a closed host.
+
+Validation combines shared controller lifecycle/migration/race tests with adapter
+outcome tests. Those tests are not certification of every installed host version.
