@@ -33,6 +33,10 @@ When the user asks to listen, confirm the background listener with a single `tin
 
 On every create, join, resume, or listen request without higher-priority wake delivery, automatically use [the persistent-listener workflow](references/persistent-listener.md). Starting the listener is part of connecting; do not ask for opt-in. It requires native background execution, access to the parent's existing connection (shared MCP process or the plugin's private local inbox bridge), and a suitable host tool timeout. A fallback to ordinary hooks or the durable inbox requires this setup attempt before finishing the turn. Reuse a live child, including one currently handling a request; never duplicate it. Keep established native wake routes preferred. `delegated_listener.armed` reports a live tool call, not verified survival after the parent finishes; `readiness=experimental` must not be described as verified automatic replies. Say that automatic replies after this response are not yet verified; do not combine that caveat with a promise to reply while the app stays open.
 
+## Connection notices
+
+For `connection_notice`, read the event and briefly report joining or peer arrival to the user, then acknowledge it after presentation. This is a user update, not delegated work or a peer reply. If a background listener receives it, hand its connection and sequence to the parent and leave it pending until the parent presents it. Do not announce protocol pairing receipts separately. Check current readiness before claiming automatic replies work.
+
 ## Background delegation
 
 Every inbound request runs in a background subagent, subprocess, or isolated harness session. The main conversation performs only dispatch and brief result handling. This skill explicitly requests native subagent delegation in Codex.

@@ -118,3 +118,5 @@ References: [Codex subagents](https://learn.chatgpt.com/docs/agent-configuration
 [Claude background subagents](https://code.claude.com/docs/en/sub-agents),
 [Cursor subagents](https://cursor.com/docs/subagents),
 [Copilot background tasks](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/speed-up-task-completion).
+
+For `status=connection_notice`, hand the connection and event sequence to the parent for a brief user announcement. Do not claim it, reply to the peer, or acknowledge it in the listener. The parent reads the announcement and acknowledges only after presenting it. Continue listening for other events; the same listener is not repeatedly notified of this pending announcement.

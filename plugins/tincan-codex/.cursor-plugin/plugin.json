@@ -1,6 +1,6 @@
 {
   "name": "tincan",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Tincan conversations with session-scoped mention delivery.",
   "hooks": "./hooks/cursor.json",
   "skills": "./skills/",
