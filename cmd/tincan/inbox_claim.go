@@ -113,7 +113,7 @@ func inboundExecution() map[string]any {
 	return map[string]any{"mode": "background_delegate", "foreground_execution": false, "claim_required": true}
 }
 
-const inboundDispatchInstructions = "Delegate this mention to a native background subagent or isolated harness worker, passing its connection, event sequence and the user's scope. The worker calls inbox_claim before acting and commits with its claim only after completion. Keep the main conversation free; do not execute inline or wait for the worker. If delegation is unavailable, leave the request pending. Do not poll."
+const inboundDispatchInstructions = "Delegate this message to a native background subagent or isolated harness worker, passing its connection, event sequence and the user's scope. The worker calls inbox_claim before acting and commits with its claim only after completion. Keep the main conversation free; do not execute inline or wait for the worker. If delegation is unavailable, leave the request pending. Do not poll."
 
 // Wake the parent only to dispatch. The worker retrieves the body when claiming;
 // peer instructions never get embedded into a foreground queue/hook prompt.
@@ -125,10 +125,10 @@ func inboundNotification(p map[string]any) map[string]any {
 	if p["kind"] == "join_request" {
 		return map[string]any{"kind": "join_request", "connection": p["connection"], "event_seq": p["event_seq"], "notice_key": p["notice_key"], "instructions": joinReviewInstructions}
 	}
-	if p["kind"] != "mention" {
+	if p["kind"] != "mention" && p["kind"] != "message" {
 		return p
 	}
-	v := map[string]any{"kind": "mention", "event_seq": p["event_seq"], "notice_key": p["notice_key"], "execution": inboundExecution(), "instructions": inboundDispatchInstructions}
+	v := map[string]any{"kind": p["kind"], "mentioned": p["mentioned"], "event_seq": p["event_seq"], "notice_key": p["notice_key"], "execution": inboundExecution(), "instructions": inboundDispatchInstructions}
 	if handle, ok := p["connection"]; ok {
 		v["connection"] = handle
 	}

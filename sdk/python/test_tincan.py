@@ -93,7 +93,7 @@ class DispatcherTests(unittest.IsolatedAsyncioTestCase):
         await client.mention("a")
         first = await asyncio.wait_for(started.get(), 1)
         await client.mention("a")  # Duplicate while the same worker is active.
-        await client.mention("b")
+        await client.events.put({"event": "message", "data": {"connection": "b", "event_seq": 1}})
         second = await asyncio.wait_for(started.get(), 1)
         self.assertFalse(client.completed)
         second.result.set_result({"status": "completed", "reply": "done"})

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/tincan-ai/tincan-plugin/internal/core"
+	"slices"
 	"strings"
 )
 
@@ -88,7 +89,20 @@ func (s *inboxState) migrate() error {
 			return errors.New("invalid inbox worker claim")
 		}
 	}
+	// Put direct mentions first without disturbing chronological order within a class.
+	slices.SortStableFunc(s.Requests, func(a, b inboxRequest) int {
+		return requestPriority(b) - requestPriority(a)
+	})
 	return nil
+}
+func requestPriority(r inboxRequest) int {
+	if r.Event.Kind == "join_requested" {
+		return 2
+	}
+	if r.Event.Mentioned {
+		return 1
+	}
+	return 0
 }
 func (s *inboxState) copy() inboxState {
 	// Mutation is copy-on-write: a failed durable save must not change live state.
@@ -181,6 +195,7 @@ func (i *inbox) ingest(e inboxEvent, valid bool) (bool, error) {
 	if e.Seq <= s.After {
 		return false, nil
 	}
+	e.Mentioned = e.Kind == "message" && slices.Contains(e.Payload.Mentions, i.agent)
 	accepted := valid && i.accepts(e)
 	s.After = e.Seq
 	if accepted {

@@ -37,7 +37,7 @@ func sidecar(ctx context.Context, b *pluginBroker, remoteTools []*mcp.Tool, inpu
 		return err
 	}
 	defer cs.Close()
-	if err = emit(map[string]any{"event": "ready", "protocol": "tincan/1", "instructions": core.AgentInstructions + "\n" + pluginInstructions, "execution": inboundExecution(), "capabilities": map[string]bool{"end_to_end_encryption": true, "forward_secrecy": true, "encrypted_history_recovery": true, "push_mentions": true, "durable_inbox": true, "host_enqueue_required": true, "background_worker_required": true, "worker_claims": true, "commitments": true, "structured_outcomes": true, "approval_queue": true, "presence_heartbeat": true, "host_status_required": true}}); err != nil {
+	if err = emit(map[string]any{"event": "ready", "protocol": "tincan/1", "instructions": core.AgentInstructions + "\n" + pluginInstructions, "execution": inboundExecution(), "capabilities": map[string]bool{"end_to_end_encryption": true, "forward_secrecy": true, "encrypted_history_recovery": true, "push_mentions": true, "push_messages": true, "durable_inbox": true, "host_enqueue_required": true, "background_worker_required": true, "worker_claims": true, "commitments": true, "structured_outcomes": true, "approval_queue": true, "presence_heartbeat": true, "host_status_required": true}}); err != nil {
 		return err
 	}
 	scan := bufio.NewScanner(input)

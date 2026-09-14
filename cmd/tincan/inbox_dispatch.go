@@ -23,7 +23,10 @@ func (i *inbox) dispatchChanges(ctx context.Context, notify func(context.Context
 		for _, r := range s.Requests {
 			kind, key := "", ""
 			if s.eligible(&r) {
-				kind = "mention"
+				kind = "message"
+				if r.Event.Mentioned {
+					kind = "mention"
+				}
 				if r.Event.Kind == "join_requested" {
 					kind = "join_request"
 				}
@@ -43,7 +46,7 @@ func (i *inbox) dispatchChanges(ctx context.Context, notify func(context.Context
 			// Only identifiers enter host wake instructions. Private details are read
 			// through inbox_requests, not injected as trusted instructions.
 			if notify != nil {
-				_ = notify(ctx, map[string]any{"kind": kind, "event_seq": r.Event.Seq, "notice_key": key})
+				_ = notify(ctx, map[string]any{"kind": kind, "event_seq": r.Event.Seq, "notice_key": key, "mentioned": r.Event.Mentioned})
 			}
 		}
 		seen = live

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
@@ -137,6 +138,7 @@ func (i *inbox) consumeStream(ctx context.Context, control func(context.Context,
 				return err
 			}
 		}
+		event.Mentioned = event.Kind == "message" && slices.Contains(event.Payload.Mentions, i.agent)
 		accepted, err := i.ingest(event, true)
 		if err != nil {
 			return err

@@ -64,7 +64,8 @@ func TestInboxFiltering(t *testing.T) {
 		{"mention", event(1, "peer", "self"), true},
 		{"self", event(1, "self", "self"), false},
 		{"untrusted", event(1, "stranger", "self"), false},
-		{"not mentioned", event(1, "peer", "someone"), false},
+		{"not mentioned", event(1, "peer", "someone"), true},
+		{"no mentions", event(1, "peer"), true},
 	}
 	automated := event(2, "peer", "self")
 	automated.Payload.Metadata = json.RawMessage(`{"tincan_listener":true}`)

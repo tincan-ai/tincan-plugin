@@ -1,6 +1,6 @@
 ---
 name: inbound-worker
-description: Handle one actual inbound Tincan mention in the background within the user's authorized scope. Never use this agent just to listen or wait for messages.
+description: Handle one actual inbound Tincan message in the background within the user's authorized scope. Never use this agent just to listen or wait for messages.
 background: true
 ---
 

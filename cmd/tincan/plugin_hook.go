@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -120,6 +121,10 @@ func runHook(root string, in hookInput) (map[string]any, error) {
 		if err != nil || json.Unmarshal(data, &s) != nil || s.migrate() != nil {
 			continue
 		}
+		for n := range s.Requests {
+			e := &s.Requests[n].Event
+			e.Mentioned = e.Kind == "message" && slices.Contains(e.Payload.Mentions, c.AgentID)
+		}
 		for _, request := range s.Requests {
 			kind := ""
 			if s.eligible(&request) {
@@ -135,7 +140,7 @@ func runHook(root string, in hookInput) (map[string]any, error) {
 			if kind == "" || state.Seen[key] == request.Event.Seq || (in.Event == "Stop" && in.StopActive) {
 				continue
 			}
-			pending = append(pending, map[string]any{"connection": handle, "event_seq": request.Event.Seq, "kind": kind})
+			pending = append(pending, map[string]any{"connection": handle, "event_seq": request.Event.Seq, "kind": kind, "mentioned": request.Event.Mentioned})
 			state.Seen[key] = request.Event.Seq
 		}
 	}
@@ -149,8 +154,17 @@ func runHook(root string, in hookInput) (map[string]any, error) {
 	if len(pending) == 0 {
 		return empty, nil
 	}
+	slices.SortStableFunc(pending, func(a, b map[string]any) int {
+		if a["mentioned"] == b["mentioned"] {
+			return 0
+		}
+		if a["mentioned"] == true {
+			return -1
+		}
+		return 1
+	})
 	data, _ := json.Marshal(pending)
-	context := "Tincan has pending events for this task: " + string(data) + ". For join_requested: " + joinReviewInstructions + " For approval_needed or needs_attention: read inbox_requests, surface its concrete question to this user and record delivery with inbox_decide; never treat this notice as approval. For message mentions: " + inboundDispatchInstructions
+	context := "Tincan has pending events for this task: " + string(data) + ". For join_requested: " + joinReviewInstructions + " For approval_needed or needs_attention: read inbox_requests, surface its concrete question to this user and record delivery with inbox_decide; never treat this notice as approval. For messages (prioritize direct mentions): " + inboundDispatchInstructions
 	if in.Event == "Stop" {
 		return map[string]any{"decision": "block", "reason": context}, nil
 	}

@@ -19,6 +19,7 @@ import (
 )
 
 type inboxEvent struct {
+	Mentioned   bool         `json:"mentioned,omitempty"`
 	JoinRequest *joinNotice  `json:"join_request,omitempty"`
 	Seq         int64        `json:"seq"`
 	Kind        string       `json:"kind"`
@@ -137,6 +138,10 @@ func openInboxIdentity(c Config, allowed []string, identityPath string, workspac
 		i.close()
 		return nil, err
 	}
+	for n := range i.state.Requests {
+		e := &i.state.Requests[n].Event
+		e.Mentioned = e.Kind == "message" && slices.Contains(e.Payload.Mentions, agent)
+	}
 	if c.CryptoPath != "" {
 		for n := range i.state.Requests {
 			i.state.Requests[n].Event.Payload.AgentName = i.state.Requests[n].Event.Payload.AgentID
@@ -209,7 +214,7 @@ func (i *inbox) accepts(e inboxEvent) bool {
 	if e.Kind == "join_requested" {
 		return i.creator && e.JoinRequest != nil && e.JoinRequest.RequestID != ""
 	}
-	if e.Kind != "message" || e.Payload.ID == "" || e.Payload.AgentID == i.agent || (!i.workspacePeers && !slices.Contains(i.allowed, e.Payload.AgentID)) || !slices.Contains(e.Payload.Mentions, i.agent) {
+	if e.Kind != "message" || e.Payload.ID == "" || e.Payload.AgentID == i.agent || (!i.workspacePeers && !slices.Contains(i.allowed, e.Payload.AgentID)) {
 		return false
 	}
 	var meta map[string]json.RawMessage
@@ -292,6 +297,7 @@ func (i *inbox) next(ctx context.Context) (*inboxEvent, error) {
 		if err != nil {
 			return nil, err
 		}
+		e.Mentioned = e.Kind == "message" && slices.Contains(e.Payload.Mentions, i.agent)
 		accepted, err := i.ingest(e, valid)
 		if err != nil {
 			return nil, err

@@ -82,7 +82,7 @@ func (b *pluginBroker) deliverCodex(ctx context.Context, c *pluginConnection, pa
 		b.setDelivery(c.Handle, s)
 		return nil
 	}
-	mention := payload["kind"] == "mention" || payload["kind"] == "join_request" || payload["kind"] == "approval_needed" || payload["kind"] == "needs_attention"
+	mention := payload["kind"] == "message" || payload["kind"] == "mention" || payload["kind"] == "join_request" || payload["kind"] == "approval_needed" || payload["kind"] == "needs_attention"
 	seq, _ := payload["event_seq"].(int64)
 	key, _ := payload["notice_key"].(string)
 	if mention && seq > 0 {

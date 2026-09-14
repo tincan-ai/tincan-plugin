@@ -64,6 +64,7 @@ func TestBackgroundSSEStaysOpenAndRecoversPending(t *testing.T) {
 			t.Fatal("no push")
 		}
 	}
+	receive(1) // Ordinary messages are delivered too.
 	receive(2)
 	receive(3) // Both messages arrive before either commitment finishes.
 	if requests.Load() != 1 {
@@ -92,6 +93,13 @@ func TestBackgroundSSEStaysOpenAndRecoversPending(t *testing.T) {
 		t.Fatal("pending retrieval did not return immediately")
 	}
 	if err = i.ack(3); err != nil {
+		t.Fatal(err)
+	}
+	pending, err = i.next(context.Background())
+	if err != nil || pending == nil || pending.Seq != 1 {
+		t.Fatal("ordinary message lost after prioritized mentions", pending, err)
+	}
+	if err = i.ack(1); err != nil {
 		t.Fatal(err)
 	}
 	pending, err = i.next(context.Background())

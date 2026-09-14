@@ -13,7 +13,7 @@ func addClaimTools(server *mcp.Server, resolve func(string) (*inbox, error)) {
 		Seq        int64  `json:"seq"`
 		WorkerID   string `json:"worker_id" jsonschema:"Unique delegated worker ID; reuse only for this same worker's retry"`
 	}
-	mcp.AddTool(server, &mcp.Tool{Name: "inbox_claim", Description: "Claim one pending mention inside its background worker before acting. Returns its body and a private claim token. If acquired=false, exit without acting. Claims survive restarts and never expire automatically."}, func(_ context.Context, _ *mcp.CallToolRequest, in claimInput) (*mcp.CallToolResult, map[string]any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "inbox_claim", Description: "Claim one pending message inside its background worker before acting. Returns its body and a private claim token. If acquired=false, exit without acting. Claims survive restarts and never expire automatically."}, func(_ context.Context, _ *mcp.CallToolRequest, in claimInput) (*mcp.CallToolResult, map[string]any, error) {
 		i, err := resolve(in.Connection)
 		if err != nil {
 			return nil, nil, err

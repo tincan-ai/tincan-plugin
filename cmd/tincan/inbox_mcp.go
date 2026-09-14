@@ -34,14 +34,17 @@ func (t *channelTransport) Connect(ctx context.Context) (mcp.Connection, error) 
 	return c, err
 }
 func (t *channelTransport) notify(ctx context.Context, e *inboxEvent) error {
-	kind := "mention"
+	kind := "message"
+	if e.Mentioned {
+		kind = "mention"
+	}
 	if e.Kind == "approval_needed" || e.Kind == "needs_attention" {
 		kind = e.Kind
 	}
 	if e.Kind == "join_requested" || e.Kind == "join_request" {
 		kind = "join_request"
 	}
-	content, _ := json.Marshal(inboundNotification(map[string]any{"kind": kind, "event_seq": e.Seq}))
+	content, _ := json.Marshal(inboundNotification(map[string]any{"kind": kind, "event_seq": e.Seq, "mentioned": e.Mentioned}))
 	params, _ := json.Marshal(map[string]any{"content": string(content), "meta": map[string]string{"event_seq": strconv.FormatInt(e.Seq, 10), "channel_id": e.ChannelID, "sender_id": e.Payload.AgentID, "message_id": e.Payload.ID}})
 	return t.conn.Write(ctx, &jsonrpc.Request{Method: "notifications/claude/channel", Params: params})
 }
@@ -93,7 +96,7 @@ func pushInbox(ctx context.Context, i *inbox, notify func(context.Context, *inbo
 		if n["kind"] != "mention" {
 			kind, _ = n["kind"].(string)
 		}
-		return notify(ctx, &inboxEvent{Seq: seq, Kind: kind})
+		return notify(ctx, &inboxEvent{Seq: seq, Kind: kind, Mentioned: n["kind"] == "mention"})
 	})
 	cancel()
 	<-done
@@ -102,7 +105,7 @@ func pushInbox(ctx context.Context, i *inbox, notify func(context.Context, *inbo
 func addInboxTools(server *mcp.Server, i *inbox) {
 	addClaimTools(server, func(_ string) (*inbox, error) { return i, nil })
 	type nextInput struct{}
-	mcp.AddTool(server, &mcp.Tool{Name: "inbox_next", Description: "Wait up to 25 seconds for one trusted direct mention, or recover pending work. Complete it with inbox_reply or inbox_ack."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ nextInput) (*mcp.CallToolResult, map[string]any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "inbox_next", Description: "Wait up to 25 seconds for one eligible peer message, prioritizing direct mentions, or recover pending work. Complete it with inbox_reply or inbox_ack."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ nextInput) (*mcp.CallToolResult, map[string]any, error) {
 		ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 		defer cancel()
 		e, err := i.next(ctx)

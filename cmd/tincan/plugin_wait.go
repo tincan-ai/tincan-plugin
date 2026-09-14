@@ -15,7 +15,7 @@ type inboxWaitInput struct {
 }
 
 func (b *pluginBroker) addWaitTool(server *mcp.Server) {
-	mcp.AddTool(server, &mcp.Tool{Name: "inbox_wait", Description: "Experimental: block inside one automatic native background listener until a mention arrives. Uses the existing SSE inbox without model polling. Returns routing metadata; claim before acting. Never call in the main conversation. Host must preserve the child and support the wait duration. An armed tool is not proof of idle wake support. Stop on timeout or cancellation. Claimed/suspended work is skipped; use inbox_requests for its recovery."}, func(ctx context.Context, _ *mcp.CallToolRequest, in inboxWaitInput) (*mcp.CallToolResult, map[string]any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "inbox_wait", Description: "Experimental: block inside one automatic native background listener until an eligible message arrives (direct mentions first). Uses the existing SSE inbox without model polling. Returns routing metadata; claim before acting. Never call in the main conversation. Host must preserve the child and support the wait duration. An armed tool is not proof of idle wake support. Stop on timeout or cancellation. Claimed/suspended work is skipped; use inbox_requests for its recovery."}, func(ctx context.Context, _ *mcp.CallToolRequest, in inboxWaitInput) (*mcp.CallToolResult, map[string]any, error) {
 		result, err := b.waitInbox(ctx, in)
 		return nil, result, err
 	})
