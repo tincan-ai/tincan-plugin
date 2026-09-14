@@ -28,28 +28,33 @@ import (
 // Only the private path, never keys, travels through Config or a tool response.
 // The file lock protects replay state and retries across independent processes.
 type cryptoState struct {
-	Identity            e2ee.Identity                 `json:"identity"`
-	Root                []byte                        `json:"root"`
-	Server              string                        `json:"server"`
-	WorkspaceID         string                        `json:"workspace_id"`
-	AgentID             string                        `json:"agent_id"`
-	Epoch               int64                         `json:"epoch"`
-	RosterHash          string                        `json:"roster_hash"`
-	Protocol            int                           `json:"protocol,omitempty"`
-	KeyPackage          []byte                        `json:"key_package,omitempty"`
-	MLS                 json.RawMessage               `json:"mls,omitempty"`
-	PrivateMLS          json.RawMessage               `json:"private_mls,omitempty"`
-	MLSEpoch            int64                         `json:"mls_epoch,omitempty"`
-	SyncSeq             int64                         `json:"sync_seq,omitempty"`
-	ActiveRoster        e2ee.Roster                   `json:"active_roster,omitempty"`
-	PendingRoster       *pendingMLSRoster             `json:"pending_roster,omitempty"`
-	Outbox              map[string]savedSend          `json:"outbox,omitempty"`
-	Archive             map[string][]byte             `json:"history_archive,omitempty"`
-	SearchIndex         map[string][]byte             `json:"history_search_index,omitempty"`
-	Consumed            map[string]bool               `json:"consumed_capsules,omitempty"`
-	Rejected            map[string]rejectedMLSMessage `json:"rejected_messages,omitempty"`
-	MessagesSinceUpdate int                           `json:"messages_since_update,omitempty"`
-	LastMLSUpdate       time.Time                     `json:"last_mls_update,omitempty"`
+	CommittedAdmissions map[string]bool                 `json:"committed_admissions,omitempty"`
+	AdmittedDevices     map[string]string               `json:"admitted_devices,omitempty"`
+	AutomaticInvites    bool                            `json:"automatic_invites,omitempty"`
+	AdmissionInvites    map[string]savedAdmissionInvite `json:"admission_invites,omitempty"`
+	JoinAdmission       *e2ee.AdmissionProof            `json:"join_admission,omitempty"`
+	Identity            e2ee.Identity                   `json:"identity"`
+	Root                []byte                          `json:"root"`
+	Server              string                          `json:"server"`
+	WorkspaceID         string                          `json:"workspace_id"`
+	AgentID             string                          `json:"agent_id"`
+	Epoch               int64                           `json:"epoch"`
+	RosterHash          string                          `json:"roster_hash"`
+	Protocol            int                             `json:"protocol,omitempty"`
+	KeyPackage          []byte                          `json:"key_package,omitempty"`
+	MLS                 json.RawMessage                 `json:"mls,omitempty"`
+	PrivateMLS          json.RawMessage                 `json:"private_mls,omitempty"`
+	MLSEpoch            int64                           `json:"mls_epoch,omitempty"`
+	SyncSeq             int64                           `json:"sync_seq,omitempty"`
+	ActiveRoster        e2ee.Roster                     `json:"active_roster,omitempty"`
+	PendingRoster       *pendingMLSRoster               `json:"pending_roster,omitempty"`
+	Outbox              map[string]savedSend            `json:"outbox,omitempty"`
+	Archive             map[string][]byte               `json:"history_archive,omitempty"`
+	SearchIndex         map[string][]byte               `json:"history_search_index,omitempty"`
+	Consumed            map[string]bool                 `json:"consumed_capsules,omitempty"`
+	Rejected            map[string]rejectedMLSMessage   `json:"rejected_messages,omitempty"`
+	MessagesSinceUpdate int                             `json:"messages_since_update,omitempty"`
+	LastMLSUpdate       time.Time                       `json:"last_mls_update,omitempty"`
 }
 
 var cryptoMu sync.Mutex
@@ -108,10 +113,11 @@ func newCrypto(path, server string, root []byte) error {
 	if err != nil {
 		return err
 	}
-	if len(root) == 0 {
+	creator := len(root) == 0
+	if creator {
 		root = d.SigningKey
 	}
-	st := cryptoState{Identity: *i, Root: root, Server: server, Protocol: 2}
+	st := cryptoState{Identity: *i, Root: root, Server: server, Protocol: 2, AutomaticInvites: creator}
 	keys, err := e2ee.MLS(context.Background(), e2ee.MLSRequest{Op: "key_package", SigningKey: i.SigningKey})
 	if err != nil {
 		return err
@@ -198,6 +204,11 @@ func withCrypto(ctx context.Context, c Config, fn func(*cryptoState) (any, error
 	return v, err
 }
 func cryptoJoinAddress(raw string) (string, []byte, error) {
+	var stripErr error
+	raw, _, _, stripErr = admissionFragment(raw)
+	if stripErr != nil {
+		return "", nil, stripErr
+	}
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "", nil, err
@@ -231,6 +242,9 @@ func cryptoConnectionInput(ctx context.Context, c Config, invite string, input m
 		input["device"] = d
 		if invite != "" {
 			input["root"] = st.Root
+			if st.JoinAdmission != nil {
+				input["admission"] = st.JoinAdmission
+			}
 			input["proof"], err = e2ee.JoinProof(st.Identity, invite, d)
 		}
 		return nil, err
@@ -611,7 +625,14 @@ func encryptedCall(ctx context.Context, c Config, method, path string, v any) (a
 			m, ok := out.(map[string]any)
 			if ok {
 				raw, _ := m["url"].(string)
-				m["url"] = cryptoInvite(raw, st.Root)
+				var expires time.Time
+				if err := decodeValue(m["expires_at"], &expires); err != nil {
+					return nil, err
+				}
+				m["url"], err = issueCryptoInvite(st, raw, expires)
+				if err != nil {
+					return nil, err
+				}
 				delete(m, "invite")
 			}
 		}
@@ -839,6 +860,9 @@ func encryptedRequest(ctx context.Context, c Config, method, path string, body i
 	return requestPlainContext(ctx, c, method, path, body)
 }
 func encryptionManage(ctx context.Context, c Config, requestID, fingerprint, revoke string) (any, error) {
+	return encryptionManageMode(ctx, c, requestID, fingerprint, revoke, false)
+}
+func encryptionManageMode(ctx context.Context, c Config, requestID, fingerprint, revoke string, automatic bool) (any, error) {
 	return withCrypto(ctx, c, func(st *cryptoState) (any, error) {
 		if err := ensureCrypto(ctx, c, st); err != nil {
 			return nil, err
@@ -874,7 +898,7 @@ func encryptionManage(ctx context.Context, c Config, requestID, fingerprint, rev
 		next.Epoch++
 		next.Previous = r.Hash()
 		if requestID != "" {
-			if len(fingerprint) != 64 {
+			if !automatic && len(fingerprint) != 64 {
 				return nil, errors.New("supply the joining device's full fingerprint verified through your existing conversation")
 			}
 			v, err := rawCallContext(ctx, c, "GET", "/e2ee/requests", nil)
@@ -882,19 +906,44 @@ func encryptionManage(ctx context.Context, c Config, requestID, fingerprint, rev
 				return nil, err
 			}
 			var requests []struct {
-				ID      string      `json:"id"`
-				AgentID string      `json:"agent_id"`
-				Device  e2ee.Device `json:"device"`
-				Status  string      `json:"status"`
+				ID        string               `json:"id"`
+				AgentID   string               `json:"agent_id"`
+				Device    e2ee.Device          `json:"device"`
+				Status    string               `json:"status"`
+				Admission *e2ee.AdmissionProof `json:"admission"`
 			}
 			if err = decodeValue(v, &requests); err != nil {
 				return nil, err
 			}
 			found := false
 			for _, req := range requests {
+				if automatic && req.ID == requestID && st.AdmittedDevices[req.Device.Fingerprint()] == requestID && st.CommittedAdmissions[req.Device.Fingerprint()] {
+					member, present := r.Device(req.AgentID)
+					if present && member.Fingerprint() == req.Device.Fingerprint() {
+						return map[string]bool{"ok": true}, nil
+					}
+					return nil, errManualAdmission
+				}
 				if req.ID == requestID && req.Status == "pending" {
-					if req.Device.Fingerprint() != fingerprint {
+					if automatic {
+						if err := reserveAdmission(c, st, requestID, req.Device, req.Admission); err != nil {
+							return nil, err
+						}
+					} else if req.Device.Fingerprint() != fingerprint {
 						return nil, errors.New("joining device fingerprint mismatch")
+					}
+					if !automatic && req.Admission != nil {
+						if invite, ok := st.AdmissionInvites[req.Admission.InviteHash]; ok && e2ee.VerifyAdmission(invite.Secret, st.Root, st.WorkspaceID, req.Admission.InviteHash, req.Device, req.Admission) {
+							invite.RequestID, invite.Fingerprint = requestID, req.Device.Fingerprint()
+							st.AdmissionInvites[req.Admission.InviteHash] = invite
+						}
+					}
+					if st.AdmittedDevices == nil {
+						st.AdmittedDevices = map[string]string{}
+					}
+					st.AdmittedDevices[req.Device.Fingerprint()] = requestID
+					if err := privateJSON(c.CryptoPath, st); err != nil {
+						return nil, err
 					}
 					req.Device.AgentID = req.AgentID
 					next.Members = append(next.Members, req.Device)
@@ -903,6 +952,9 @@ func encryptionManage(ctx context.Context, c Config, requestID, fingerprint, rev
 				}
 			}
 			if !found {
+				if automatic {
+					return nil, errManualAdmission
+				}
 				return nil, errors.New("pending encrypted request not found")
 			}
 		} else {
@@ -946,6 +998,17 @@ func localToolResult(v any, err error) (*mcp.CallToolResult, error) {
 func encryptedTool(ctx context.Context, c Config, name string, args map[string]any) (*mcp.CallToolResult, error) {
 	str := func(k string) string { v, _ := args[k].(string); return v }
 	switch name {
+	case "encryption_admission_policy":
+		var automatic *bool
+		if value, exists := args["automatic_invites"]; exists {
+			enabled, ok := value.(bool)
+			if !ok {
+				return localToolResult(nil, errors.New("automatic_invites must be a boolean"))
+			}
+			automatic = &enabled
+		}
+		v, e := encryptionAdmissionPolicy(ctx, c, automatic)
+		return localToolResult(v, e)
 	case "encryption_rejections":
 		v, e := encryptionRejections(ctx, c)
 		return localToolResult(v, e)
@@ -1241,6 +1304,7 @@ func localCryptoTools() []*mcp.Tool {
 		makeTool("encryption_rotate", "Refresh the MLS workspace's group keys. The local creator performs the update; no key material enters this tool.", map[string]any{}),
 		makeTool("encryption_history_backup", "Save an encrypted local history backup without credentials or live MLS state. Keep its history key separately in private backup storage.", map[string]any{"out": str("Private output file path; existing files are never overwritten")}, "out"),
 		makeTool("encryption_history_restore", "Import an explicitly selected encrypted history backup after joining the same workspace. This restores history only; it never rolls back live encryption state.", map[string]any{"file": str("History backup path"), "key_file": str("Owner-only recovery key file path; never supply the key itself")}, "file", "key_file"),
+		makeTool("encryption_admission_policy", "Read or change creator-local admission policy. Automatic invitations authorize one device proving possession of a client-held secret. Set automatic_invites=false to require manual fingerprint verification and invalidate outstanding automatic invitations. Only change with owner authorization.", map[string]any{"automatic_invites": map[string]any{"type": "boolean"}}),
 		makeTool("encryption_requests", "List pending encryption devices. Verify the fingerprint through the existing conversation with the joining device.", map[string]any{}),
 		makeTool("encryption_approve", "Approve one device only after the account owner authorizes its verified fingerprint. The local creator signs membership; private keys never enter tool arguments.", map[string]any{"request_id": str("Pending request ID"), "fingerprint": str("Full 64-character fingerprint obtained from the joining device through a trusted conversation")}, "request_id", "fingerprint"),
 		makeTool("encryption_deny", "Decline one pending encryption device after the owner decides not to admit it.", map[string]any{"request_id": str("Pending request ID")}, "request_id"),
@@ -1257,6 +1321,15 @@ func isLocalCryptoTool(name string) bool {
 	return false
 }
 func decryptInboxEvent(ctx context.Context, c Config, event *inboxEvent) (bool, error) {
+	if c.CryptoPath != "" && event.Kind == "join_requested" && event.JoinRequest != nil {
+		_, err := encryptionManageMode(ctx, c, event.JoinRequest.RequestID, "", "", true)
+		if err == nil {
+			return false, nil
+		}
+		if !errors.Is(err, errManualAdmission) {
+			return false, err
+		}
+	}
 	if c.CryptoPath == "" || event.Kind != "message" {
 		return true, nil
 	}

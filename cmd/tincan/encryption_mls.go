@@ -443,6 +443,16 @@ func changeMLSRoster(ctx context.Context, c Config, st *cryptoState, old, next e
 	}
 	st.MLS = out.State
 	st.PendingRoster = &pendingMLSRoster{Roster: next, RequestID: requestID}
+	if requestID != "" {
+		if st.CommittedAdmissions == nil {
+			st.CommittedAdmissions = map[string]bool{}
+		}
+		for _, device := range next.Members {
+			if _, existed := old.Device(device.AgentID); !existed {
+				st.CommittedAdmissions[device.Fingerprint()] = true
+			}
+		}
+	}
 	if err = privateJSON(c.CryptoPath, st); err != nil {
 		return nil, err
 	}

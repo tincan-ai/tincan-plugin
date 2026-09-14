@@ -131,6 +131,9 @@ func resumeCLIJoin(c *Config) error {
 	if status.Status != "joined" {
 		c.PendingJoin.Status = status.Status
 		_ = save(*c)
+		if c.PendingJoin.Automatic {
+			return fmt.Errorf("join request %s; waiting for automatic verification by the creator runtime. Resume with this same identity", status.Status)
+		}
 		return fmt.Errorf("join request %s; verification phrase: %s. Resume with the same identity after creator approval", status.Status, c.PendingJoin.VerificationPhrase)
 	}
 	if status.Token == "" {

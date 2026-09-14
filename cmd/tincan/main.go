@@ -210,6 +210,7 @@ func bootstrap(c *Config, name, workspace, invite, ref string, reports ...*core.
 		if c.CryptoPath != "" {
 			_, e = withCrypto(context.Background(), *c, func(st *cryptoState) (any, error) {
 				d, err := st.device("")
+				c.PendingJoin.Automatic = st.JoinAdmission != nil
 				c.PendingJoin.Fingerprint = d.Fingerprint()
 				c.PendingJoin.VerificationPhrase = c.PendingJoin.Fingerprint
 				return nil, err
@@ -220,6 +221,9 @@ func bootstrap(c *Config, name, workspace, invite, ref string, reports ...*core.
 		}
 		if e = save(*c); e != nil {
 			return e
+		}
+		if c.PendingJoin.Automatic {
+			return errors.New("waiting for the creator runtime to verify the invitation automatically; resume connect with this same identity")
 		}
 		return fmt.Errorf("waiting for creator approval; verification phrase: %s. Run connect again with the same identity to resume", c.PendingJoin.VerificationPhrase)
 	}
@@ -332,6 +336,7 @@ func main() {
 	output := f.String("out", "tincan-export.zip", "Export filename")
 	file := f.String("file", "", "Attachment path")
 	historyKeyFile := f.String("key-file", "", "Private history recovery key file path")
+	automaticInvites := f.String("automatic-invites", "", "Creator-local encrypted invitation policy: true or false")
 	approval := f.String("require-join-approval", "", "Enable or disable account join approval: true or false")
 	requestID := f.String("request-id", "", "Join request ID")
 	decision := f.String("decision", "", "approved or denied")
@@ -374,6 +379,7 @@ func main() {
 		return
 	}
 	if (cmd == "connect" || cmd == "mcp") && c.Token == "" && c.PendingJoin == nil {
+		rawInvitation := *invite
 		cleaned, root, err := cryptoJoinAddress(*invite)
 		if err != nil {
 			fatal(err)
@@ -391,6 +397,9 @@ func main() {
 			if c.CryptoPath == "" {
 				c.CryptoPath = configPath() + ".e2ee.json"
 				if err = newCrypto(c.CryptoPath, c.Server, root); err != nil {
+					fatal(err)
+				}
+				if err = prepareAdmissionJoin(context.Background(), c, rawInvitation); err != nil {
 					fatal(err)
 				}
 				if err = save(c); err != nil {
@@ -468,6 +477,16 @@ func main() {
 		v, e = backupHistory(context.Background(), c, *output)
 	case "encryption-history-restore":
 		v, e = restoreHistory(context.Background(), c, *file, *historyKeyFile)
+	case "encryption-admission-policy":
+		var automatic *bool
+		if *automaticInvites != "" {
+			if *automaticInvites != "true" && *automaticInvites != "false" {
+				fatal(errors.New("automatic-invites must be true or false"))
+			}
+			enabled := *automaticInvites == "true"
+			automatic = &enabled
+		}
+		v, e = encryptionAdmissionPolicy(context.Background(), c, automatic)
 	case "encryption-requests":
 		v, e = encryptionManage(context.Background(), c, "", "", "")
 	case "encryption-rejections":
@@ -610,6 +629,7 @@ func help() {
   tincan connect --server URL --name Scout
   tincan encryption-check
   tincan connect --identity owner --server URL --name Owner --e2ee
+  tincan encryption-admission-policy --identity owner --automatic-invites false
   tincan encryption-requests --identity owner
   tincan encryption-rejections --identity owner
   tincan encryption-approve --identity owner --request-id ID --fingerprint VERIFIED_FINGERPRINT

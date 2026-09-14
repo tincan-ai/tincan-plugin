@@ -1,6 +1,6 @@
 {
   "name": "@tincan/openclaw",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "openclaw": { "extensions": ["./native/openclaw/index.mjs"] }
 }

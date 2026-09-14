@@ -220,6 +220,9 @@ func (b *pluginBroker) connect(rawURL, name, workspace string, contexts ...conne
 		if err = newCrypto(c.Config.CryptoPath, c.Config.Server, root); err != nil {
 			return nil, err
 		}
+		if err = prepareAdmissionJoin(context.Background(), c.Config, rawURL); err != nil {
+			return nil, err
+		}
 		if err = cryptoConnectionInput(context.Background(), c.Config, invite, input); err != nil {
 			return nil, err
 		}
@@ -252,6 +255,7 @@ func (b *pluginBroker) connect(rawURL, name, workspace string, contexts ...conne
 		if c.Config.CryptoPath != "" {
 			_, err = withCrypto(context.Background(), c.Config, func(st *cryptoState) (any, error) {
 				d, e := st.device("")
+				receipt.Automatic = st.JoinAdmission != nil
 				receipt.Fingerprint = d.Fingerprint()
 				receipt.VerificationPhrase = receipt.Fingerprint
 				return nil, e
@@ -269,8 +273,25 @@ func (b *pluginBroker) connect(rawURL, name, workspace string, contexts ...conne
 	c.Config.Token, c.AgentID, c.RoomID = joined.Token, joined.AgentID, joined.RoomID
 	c.RoomName = joined.RoomName
 	c.ShareURL, c.ShareExpiresAt = joined.ShareURL, joined.ShareExpiresAt
+	c.ClaimURL, c.ClaimExpiresAt = joined.ClaimURL, joined.ClaimExpiresAt
+	// Persist credentials before MLS initialization, but never save a bare
+	// transport link as an encrypted invitation if setup is interrupted.
+	rawShareURL := c.ShareURL
 	if c.Config.CryptoPath != "" {
-		_, err = withCrypto(context.Background(), c.Config, func(st *cryptoState) (any, error) { c.ShareURL = cryptoInvite(c.ShareURL, st.Root); return nil, nil })
+		c.ShareURL = ""
+	}
+	if err = b.save(c); err != nil {
+		return nil, err
+	}
+	if c.Config.CryptoPath != "" {
+		_, err = withCrypto(context.Background(), c.Config, func(st *cryptoState) (any, error) {
+			if err := ensureCrypto(context.Background(), c.Config, st); err != nil {
+				return nil, err
+			}
+			var err error
+			c.ShareURL, err = issueCryptoInvite(st, rawShareURL, c.ShareExpiresAt)
+			return nil, err
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -401,7 +422,11 @@ func (b *pluginBroker) prepare(c *pluginConnection) error {
 
 func connectionView(c *pluginConnection) map[string]any {
 	if c.PendingJoin != nil {
-		return map[string]any{"connection": c.Handle, "name": c.Name, "status": c.PendingJoin.Status, "request_id": c.PendingJoin.RequestID, "verification_phrase": c.PendingJoin.VerificationPhrase, "fingerprint": c.PendingJoin.Fingerprint, "encryption_mode": connectionEncryptionMode(c), "expires_at": c.PendingJoin.ExpiresAt, "next": "Share the verification phrase with the creator through your existing conversation. Access is blocked until approval. Keep this connection handle; do not share it. The runtime checks approval in the background while open. Resume with tincan_connect(connection=...) after a restart."}
+		next := "Share the verification phrase with the creator through your existing conversation. Access is blocked until approval. Keep this connection handle; do not share it. The runtime checks approval in the background while open. Resume with tincan_connect(connection=...) after a restart."
+		if c.PendingJoin.Automatic {
+			next = "The join request is saved. The creator runtime will verify the invitation automatically when online; no fingerprint exchange is needed. Keep this connection handle private and resume it after a restart. If the creator has disabled automatic admission, manual verification is required."
+		}
+		return map[string]any{"automatic_admission": c.PendingJoin.Automatic, "connection": c.Handle, "name": c.Name, "status": c.PendingJoin.Status, "request_id": c.PendingJoin.RequestID, "verification_phrase": c.PendingJoin.VerificationPhrase, "fingerprint": c.PendingJoin.Fingerprint, "encryption_mode": connectionEncryptionMode(c), "expires_at": c.PendingJoin.ExpiresAt, "next": next}
 	}
 	view := map[string]any{"connection": c.Handle, "agent_id": c.AgentID, "name": c.Name, "profile": c.Profile, "intent": c.Intent, "room_id": c.RoomID, "room_name": c.RoomName, "channel_id": c.ChannelID, "share_url": c.ShareURL, "paired": false, "next": core.ConnectionWelcomeInstructions + " Finish this turn. Background streaming handles pairing and mentions. Keep the connection handle private to this task."}
 	view["encryption_mode"] = connectionEncryptionMode(c)
