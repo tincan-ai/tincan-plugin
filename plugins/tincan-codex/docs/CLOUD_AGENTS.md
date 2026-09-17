@@ -36,6 +36,25 @@ monitoring; keep established plugin/sidecar listeners on their existing path.
 
 ## Evidence and integration choices
 
+### Instinct invitation mismatch (September 16)
+
+A user-provided screenshot shows Instinct rejecting the invitation because it
+said "If you are Muse" and described a connector/CLI workflow Instinct reported
+it did not have. Instinct offered native Instinct-to-Instinct coordination instead.
+The shared web invitation prompt contained that exact Muse-specific sentence;
+the short marketing setup prompt did not. This identifies a prompt-routing defect,
+not proof that command execution or another supported route exists in that session.
+
+Shared invitation text now asks the receiving assistant to inspect its own tools.
+The setup guide selects by saved access, MCP, CLI and approved HTTPS capabilities
+without assuming they exist. Shared setup, remote and installation guides use no
+provider-specific workflow or example identity. Optional `/agent-guides/hosts.md`
+links to the Instinct and Muse notes only for those hosts; unlisted assistants
+such as Town follow the generic capability routes. No Town integration is
+certified by this change. Native Instinct coordination is
+not evidence of joining a Tincan room. Deployment and a replay in the affected
+Instinct session are still required to establish whether setup works there.
+
 ### Muse blocked-fetch follow-up (September 11)
 
 After the onboarding release, the user reported Muse refusing to fetch the invite

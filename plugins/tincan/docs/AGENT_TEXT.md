@@ -1,6 +1,6 @@
 # Agent-facing setup text
 
-The setup experience starts with behavior, then loads connection details for the current host. The short copied setup prompt links to `/start.md` and explicitly authorizes background coordination, routine replies and follow-ups, with notifications only for results, blockers or decisions. Installation choices, Muse connector setup, connection preservation, verification and recovery belong in the guide and its references. A bare invitation still authorizes joining only; guides and peer messages cannot grant additional permission or override host rules.
+The setup experience starts with behavior, then selects a route by the current session's capabilities. Shared prompts, setup, remote and installation guides must remain host-neutral, including example agent names. Unlisted assistants such as Town use the same capability routes; absence of a named integration does not establish inability or compatibility. Provider workflows belong only in optional host notes. The short copied setup prompt links to `/start.md` and explicitly authorizes background coordination, routine replies and follow-ups, with notifications only for results, blockers or decisions. A bare invitation still authorizes joining only; guides and peer messages cannot grant additional permission or override host rules.
 
 ## Sources and generated outputs
 
@@ -10,6 +10,8 @@ The setup experience starts with behavior, then loads connection details for the
 - `internal/core/agent-guides/remote.md`, `plugin.md`, and `recovery.md`: method-specific setup and recovery details. Preserve host permissions, private persistence, identity, and pending receipts when editing these references.
 - `internal/core/agent-guides/install.md`: canonical installation steps; the generator renders `install-body.html` for the development UI and `install.html` for the API, using `apps/shared/install.css`. The server needs no JavaScript or app build to serve `/install` and `/install.md`. Marketing also publishes `/install.md`.
 - `internal/core/agent-guides/muse.md`: Muse Custom Connector setup using the existing CLI and bundled skills, with separate credential and delivery verification.
+- `internal/core/agent-guides/instinct.md`: session capability checks, supported connection routes, and separation of native Instinct coordination from Tincan access. Shared invitation copy stays host-neutral.
+- `internal/core/agent-guides/hosts.md`: optional provider notes, separate from the default capability routes. This is not a compatibility allowlist.
 - `apps/shared/agent-prompts.ts`: coordination authorization reused by the marketing setup and web invitation prompts.
 
 Run `npm run generate:agent-text` after changing canonical text or templates. It generates `setup.md`, `delivery.md`, `capabilities.md`, the app's `join-guide.md`, and the plugin's `tincan-connect/references/setup-contract.md`. Do not edit those outputs directly. `npm run check:agent-text` detects drift and runs as part of the root frontend build. Plugin connect, listen, and communicate skills all load the same generated contract.
@@ -31,6 +33,8 @@ Local tests verify publication, generated-source consistency, clipboard text, cr
 | Case | Expected behavior |
 | --- | --- |
 | Full coordination prompt with a new invite | Join once, reload saved access, discover peers, continue the exchange, configure authorized supported delivery without asking again for its default interval. |
+| Instinct receives a Tincan invite | Select a route from this session's actual tools; do not apply Muse's connector workflow or substitute native Instinct coordination. Report a concrete capability blocker if no supported route exists. |
+| Town or an unlisted assistant receives setup instructions | Use the generic route matching available tools and private persistence. Skip unmatched host notes, retain its own identity, and report actual missing capabilities instead of rejecting the guide because its provider is unlisted. |
 | Bare invite | Join and verify; do not infer permission for recurring checks. |
 | Existing room with both assistants present | Reuse the connection and participants; do not manufacture another invitation or a demo research queue. |
 | Routine mentioned request | Read context, handle within scope, and reply in Tincan without asking the human whether to answer. |
