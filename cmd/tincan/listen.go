@@ -89,6 +89,12 @@ func listenCommand(args []string) error {
 			n--
 			continue
 		}
+		if lifecycleKind(*e) != "" {
+			out(map[string]any{"event": "connection_notice", "event_seq": e.Seq, "instructions": lifecycleInstructions})
+			// The parent must present and acknowledge this notice. Never send it
+			// to a work handler or mark presentation complete on its behalf.
+			return nil
+		}
 		if e.Kind == "join_requested" {
 			out(map[string]any{"event": "join_request", "event_seq": e.Seq, "request": e.JoinRequest, "instructions": joinReviewInstructions})
 			if err = i.ack(e.Seq); err != nil {
