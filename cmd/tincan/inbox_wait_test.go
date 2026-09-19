@@ -150,6 +150,10 @@ func TestDelegatedWaitTwoDelayedSSEMentions(t *testing.T) {
 			fmt.Fprint(w, `{"agent":{"encryption_mode":"standard"}}`)
 			return
 		}
+		if r.URL.Path == "/api/v1/channels" {
+			fmt.Fprint(w, `[{"id":"channel","encryption_mode":"standard"}]`)
+			return
+		}
 		if r.URL.Path == "/api/v1/messages" && r.Method == "POST" {
 			var reply core.SendInput
 			if err := json.NewDecoder(r.Body).Decode(&reply); err != nil {

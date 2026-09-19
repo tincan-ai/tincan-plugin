@@ -157,7 +157,7 @@ func (w *codexWorker) turn(ctx context.Context, event *inboxEvent) (*workerCompl
 func workerCommand(args []string) error {
 	f := flag.NewFlagSet("worker", flag.ContinueOnError)
 	invite := f.String("invite", "", "Join URL; omit to create a room")
-	encrypted := f.Bool("e2ee", true, "Encrypt new worker workspaces by default; use --e2ee=false for a standard workspace")
+	encrypted := f.Bool("e2ee", false, "Opt in to a new encrypted worker workspace; a paid plan is required before use")
 	handle := f.String("connection", "", "Resume only an existing Tincan worker identity")
 	project := f.String("project", ".", "Project directory")
 	endpoint := f.String("server", runtimeServer(), "Tincan server URL (TINCAN_SERVER; use an origin without a trailing slash)")

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -112,7 +113,7 @@ func TestNamedRuntimeIdentityPersistence(t *testing.T) {
 	if err := save(first); err != nil {
 		t.Fatal(err)
 	}
-	if got := load(); got != first {
+	if got := load(); !reflect.DeepEqual(got, first) {
 		t.Fatal("runtime failed to resume")
 	}
 	info, err := os.Stat(configPath())
@@ -127,7 +128,7 @@ func TestNamedRuntimeIdentityPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	cliIdentity = "first-runtime"
-	if got := load(); got != first {
+	if got := load(); !reflect.DeepEqual(got, first) {
 		t.Fatal("second runtime overwrote first identity")
 	}
 	cliIdentity = ""

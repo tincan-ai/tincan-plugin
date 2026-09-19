@@ -13,6 +13,7 @@ import (
 	"errors"
 	"io"
 	"sort"
+	"strings"
 
 	"filippo.io/age"
 )
@@ -36,17 +37,23 @@ type Device struct {
 	KeyPackage []byte `json:"key_package,omitempty"`
 }
 type Roster struct {
-	Version     int      `json:"version"`
-	WorkspaceID string   `json:"workspace_id"`
-	Epoch       int64    `json:"epoch"`
-	Previous    string   `json:"previous"`
-	Members     []Device `json:"members"`
-	Signature   []byte   `json:"signature"`
-	Protocol    int      `json:"protocol,omitempty"`
-	Commit      []byte   `json:"commit,omitempty"`
-	Welcome     []byte   `json:"welcome,omitempty"`
+	RoomID        string              `json:"room_id,omitempty"`
+	RoomMembers   map[string][]string `json:"room_members,omitempty"`
+	RoomChannels  map[string]string   `json:"room_channels,omitempty"`
+	PlainChannels []string            `json:"plain_channels,omitempty"`
+	Version       int                 `json:"version"`
+	WorkspaceID   string              `json:"workspace_id"`
+	Epoch         int64               `json:"epoch"`
+	Previous      string              `json:"previous"`
+	Members       []Device            `json:"members"`
+	Signature     []byte              `json:"signature"`
+	Protocol      int                 `json:"protocol,omitempty"`
+	Commit        []byte              `json:"commit,omitempty"`
+	Welcome       []byte              `json:"welcome,omitempty"`
 }
 type Envelope struct {
+	RoomGroup     bool     `json:"room_group,omitempty"`
+	RoomID        string   `json:"room_id,omitempty"`
 	Kind          string   `json:"kind"`
 	Version       int      `json:"version"`
 	WorkspaceID   string   `json:"workspace_id"`
@@ -200,6 +207,11 @@ func Decrypt(i Identity, data []byte, limit int64) ([]byte, error) {
 	return b, nil
 }
 func (e *Envelope) Seal(i Identity, r Roster, recipients []Device, data []byte) error {
+	if room := r.ChannelRoom(e.ChannelID); room != "" {
+		e.RoomID = room
+		recipients = r.RoomDevices(room)
+	}
+
 	limit := MaxPlaintextBytes
 	if e.Kind == "file" {
 		limit = MaxFileBytes + 1024
@@ -222,6 +234,17 @@ func (e *Envelope) Seal(i Identity, r Roster, recipients []Device, data []byte) 
 	return err
 }
 func (e Envelope) Verify(r Roster) error {
+	if e.RoomGroup != (r.RoomID != "") || r.RoomID != "" && (e.RoomID != r.RoomID || r.ChannelRoom(e.ChannelID) != r.RoomID) {
+		return errors.New("encryption group scope mismatch")
+	}
+
+	if room := r.ChannelRoom(e.ChannelID); room != "" && (e.RoomID != room || !r.RoomHas(room, e.SenderID)) {
+		return errors.New("encrypted room membership mismatch")
+	}
+	if e.RoomID != "" && r.ChannelRoom(e.ChannelID) != e.RoomID {
+		return errors.New("untrusted encrypted room binding")
+	}
+
 	d, ok := r.Device(e.SenderID)
 	sig := e.Signature
 	e.Signature = nil
@@ -256,4 +279,47 @@ func VerifyJoin(invite string, d Device, proof []byte) bool {
 		Invite string
 		Device Device
 	}{invite, d}, proof)
+}
+
+// New encrypted channel identifiers pin their room independently of relay labels.
+func RoomForChannel(channel string) string {
+	if !strings.HasPrefix(channel, "ch_room_") {
+		return ""
+	}
+	tail := strings.TrimPrefix(channel, "ch_room_")
+	i := strings.LastIndex(tail, "_")
+	if i < 1 {
+		return ""
+	}
+	return tail[:i]
+}
+func (r Roster) ChannelRoom(channel string) string {
+	if room := RoomForChannel(channel); room != "" {
+		return room
+	}
+	return r.RoomChannels[channel]
+}
+func (r Roster) RoomDevices(room string) []Device {
+	if r.RoomID == room {
+		return r.Members
+	}
+	var devices []Device
+	for _, id := range r.RoomMembers[room] {
+		if d, ok := r.Device(id); ok {
+			devices = append(devices, d)
+		}
+	}
+	return devices
+}
+func (r Roster) RoomHas(room, id string) bool {
+	if r.RoomID == room {
+		_, ok := r.Device(id)
+		return ok
+	}
+	for _, member := range r.RoomMembers[room] {
+		if member == id {
+			return true
+		}
+	}
+	return false
 }

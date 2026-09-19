@@ -22,6 +22,7 @@ func admissionInviteHash(token string) string {
 var errManualAdmission = errors.New("this request requires manual fingerprint verification")
 
 type savedAdmissionInvite struct {
+	RoomID      string    `json:"room_id,omitempty"`
 	Secret      []byte    `json:"secret"`
 	ExpiresAt   time.Time `json:"expires_at"`
 	RequestID   string    `json:"request_id,omitempty"`
@@ -77,7 +78,7 @@ func prepareAdmissionJoin(ctx context.Context, c Config, raw string) error {
 	return err
 }
 
-func issueCryptoInvite(st *cryptoState, raw string, expires time.Time) (string, error) {
+func issueCryptoInvite(st *cryptoState, raw string, expires time.Time, roomID string) (string, error) {
 	pinned := cryptoInvite(raw, st.Root)
 	own, err := st.device(st.AgentID)
 	if err != nil {
@@ -114,7 +115,7 @@ func issueCryptoInvite(st *cryptoState, raw string, expires time.Time) (string, 
 			delete(st.AdmissionInvites, hash)
 		}
 	}
-	st.AdmissionInvites[admissionInviteHash(token)] = savedAdmissionInvite{Secret: secret, ExpiresAt: expires}
+	st.AdmissionInvites[admissionInviteHash(token)] = savedAdmissionInvite{Secret: secret, ExpiresAt: expires, RoomID: roomID}
 	return pinned + ".auto." + base64.RawURLEncoding.EncodeToString(secret) + "." + base64.RawURLEncoding.EncodeToString([]byte(st.WorkspaceID)), nil
 }
 

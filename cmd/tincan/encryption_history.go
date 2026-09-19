@@ -53,6 +53,7 @@ func historyIndexMayMatch(filter, key []byte, query string) bool {
 // History backups intentionally exclude live MLS state, credentials, pending
 // commits, and signing keys. The archive key must be kept separately by the user.
 type historyBackup struct {
+	RoomID      string            `json:"room_id,omitempty"`
 	Version     int               `json:"version"`
 	WorkspaceID string            `json:"workspace_id"`
 	Root        []byte            `json:"root"`
@@ -85,7 +86,7 @@ func backupHistory(ctx context.Context, c Config, path string) (any, error) {
 				os.Remove(path)
 			}
 		}()
-		if err = json.NewEncoder(f).Encode(historyBackup{Version: 2, WorkspaceID: st.WorkspaceID, Root: st.Root, Archive: st.Archive}); err != nil {
+		if err = json.NewEncoder(f).Encode(historyBackup{RoomID: st.RoomID, Version: 2, WorkspaceID: st.WorkspaceID, Root: st.Root, Archive: st.Archive}); err != nil {
 			return nil, err
 		}
 		if err = f.Sync(); err != nil {
@@ -113,7 +114,7 @@ func restoreHistory(ctx context.Context, c Config, path, keyPath string) (any, e
 			return nil, errors.New("history backup exceeds limit")
 		}
 		var backup historyBackup
-		if json.Unmarshal(data, &backup) != nil || backup.Version != 2 || backup.WorkspaceID != st.WorkspaceID || !bytes.Equal(backup.Root, st.Root) {
+		if json.Unmarshal(data, &backup) != nil || backup.Version != 2 || backup.RoomID != st.RoomID || backup.WorkspaceID != st.WorkspaceID || !bytes.Equal(backup.Root, st.Root) {
 			return nil, errors.New("history backup belongs to another workspace or protocol")
 		}
 		if keyPath == "" {

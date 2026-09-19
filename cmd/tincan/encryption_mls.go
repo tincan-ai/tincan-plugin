@@ -88,6 +88,9 @@ func (st *cryptoState) archivePut(c Config, e e2ee.Envelope, entry archiveEntry)
 }
 func (st *cryptoState) mlsCall(ctx context.Context, op string, data, aad, member []byte, private bool) (e2ee.MLSResponse, error) {
 	state, group := st.MLS, st.WorkspaceID
+	if st.RoomID != "" {
+		group = st.WorkspaceID + "/room/" + st.RoomID
+	}
 	if private {
 		state, group = st.PrivateMLS, st.WorkspaceID+"/private/"+st.AgentID
 	}
@@ -131,7 +134,15 @@ func ensureMLS(ctx context.Context, c Config, st *cryptoState, remoteEpoch int64
 		if err != nil {
 			return err
 		}
-		r := e2ee.Roster{Protocol: 2, WorkspaceID: st.WorkspaceID, Epoch: 1, Members: []e2ee.Device{d}}
+		r := e2ee.Roster{RoomID: st.RoomID, Protocol: 2, WorkspaceID: st.WorkspaceID, Epoch: 1, Members: []e2ee.Device{d}, PlainChannels: st.InitialPlainChannels}
+		if st.RoomID != "" {
+			r.PlainChannels = nil
+		}
+		if st.RoomID == "" {
+			if err = loadInitialRoomPolicy(ctx, c, &r); err != nil {
+				return err
+			}
+		}
 		if err = r.Sign(st.Identity); err != nil {
 			return err
 		}
@@ -143,7 +154,7 @@ func ensureMLS(ctx context.Context, c Config, st *cryptoState, remoteEpoch int64
 	if st.PendingRoster != nil {
 		_, err := rawCallContext(ctx, c, "POST", "/e2ee/roster", st.PendingRoster)
 		if err != nil {
-			if st.PendingRoster.Roster.Epoch > 1 && (strings.Contains(err.Error(), `"code":"request_unavailable"`) || strings.Contains(err.Error(), `"code":"invalid_roster"`)) {
+			if st.PendingRoster.Roster.Epoch > 1 && (strings.Contains(err.Error(), `"code":"request_unavailable"`) || strings.Contains(err.Error(), `"code":"invalid_roster"`) || strings.Contains(err.Error(), `"code":"encryption_plan_required"`) || strings.Contains(err.Error(), `"code":"invalid_room_policy"`) || strings.Contains(err.Error(), `"code":"room_owner_required"`)) {
 				// A definitive rejection cannot have published this commit. Keep
 				// the current receive ratchet while discarding only the proposal.
 				out, discardErr := st.mlsCall(ctx, "discard", nil, nil, nil, false)
@@ -206,6 +217,9 @@ func syncMLS(ctx context.Context, c Config, st *cryptoState) error {
 				if err = json.Unmarshal(row.Payload, &r); err != nil {
 					return err
 				}
+				if r.RoomID != st.RoomID {
+					return errors.New("encryption journal room mismatch")
+				}
 				if err = r.Verify(st.Root, st.WorkspaceID); err != nil {
 					return err
 				}
@@ -248,6 +262,23 @@ func syncMLS(ctx context.Context, c Config, st *cryptoState) error {
 					return errors.New("this encrypted device has been removed; request a new invitation")
 				}
 				st.ActiveRoster = r
+			case "opaque":
+				var payload struct {
+					Capsule  []byte `json:"capsule"`
+					Identity string `json:"identity"`
+				}
+				if err = json.Unmarshal(row.Payload, &payload); err != nil {
+					return err
+				}
+				if _, member := st.ActiveRoster.Device(st.AgentID); member && !st.Consumed[payload.Identity] {
+					out, e := st.mlsCall(ctx, "decrypt", payload.Capsule, nil, nil, false)
+					if e != nil && !errors.Is(e, e2ee.ErrMLSApplicationRejected) {
+						return e
+					}
+					if e == nil {
+						st.MLS = out.State
+					}
+				}
 			case "envelope":
 				var e e2ee.Envelope
 				if err = json.Unmarshal(row.Payload, &e); err != nil {
@@ -297,10 +328,28 @@ func consumeMLSKey(ctx context.Context, c Config, st *cryptoState, e e2ee.Envelo
 		return err
 	}
 	sender, ok := st.ActiveRoster.Device(e.SenderID)
-	if !ok || !bytes.Equal(out.Sender, sender.SigningKey) || !bytes.Equal(out.AAD, e.MLSContext()) || len(out.Data) != 32 {
+	if !ok || !bytes.Equal(out.Sender, sender.SigningKey) || !bytes.Equal(out.AAD, e.MLSContext()) {
 		return e2ee.ErrMLSApplicationRejected
 	}
-	if err = st.archivePut(c, e, archiveEntry{Key: out.Data}); err != nil {
+	key := out.Data
+	if e.RoomID != "" && !e.RoomGroup {
+		if !st.ActiveRoster.RoomHas(e.RoomID, st.AgentID) {
+			st.MLS = out.State
+			if st.Consumed == nil {
+				st.Consumed = map[string]bool{}
+			}
+			st.Consumed[archiveID(e)] = true
+			return nil
+		}
+		key, err = e2ee.Decrypt(st.Identity, out.Data, 32)
+		if err != nil {
+			return e2ee.ErrMLSApplicationRejected
+		}
+	}
+	if len(key) != 32 {
+		return e2ee.ErrMLSApplicationRejected
+	}
+	if err = st.archivePut(c, e, archiveEntry{Key: key}); err != nil {
 		return err
 	}
 	if st.Consumed == nil {
@@ -353,7 +402,22 @@ func sealMLS(ctx context.Context, c Config, st *cryptoState, e *e2ee.Envelope, r
 		}
 		st.PrivateMLS = out.State
 	}
-	out, err := st.mlsCall(ctx, "encrypt", key, e.MLSContext(), nil, private)
+	capsuleKey := key
+	if room := r.ChannelRoom(e.ChannelID); room != "" {
+		if !r.RoomHas(room, st.AgentID) {
+			return errors.New("this device is not a member of the encrypted room")
+		}
+		e.RoomID = room
+		if st.RoomID != "" {
+			e.RoomGroup = true
+		} else {
+			capsuleKey, err = e2ee.Encrypt(key, r.RoomDevices(room))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	out, err := st.mlsCall(ctx, "encrypt", capsuleKey, e.MLSContext(), nil, private)
 	if err != nil {
 		return err
 	}

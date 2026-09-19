@@ -225,7 +225,7 @@ func (e Envelope) verifyMLS(r Roster, d Device, ok bool, sig []byte) error {
 	} else if e.Kind != "message" {
 		return errors.New("unknown encrypted payload kind")
 	}
-	if !ok || r.Protocol != 2 || e.WorkspaceID != r.WorkspaceID || e.Epoch != r.Epoch || e.RosterHash != r.Hash() || e.ChannelID == "" || len(e.Key) < 1 || len(e.Key) > 128 || len(e.Capsule) < 32 || len(e.Capsule) > 8192 || len(e.PayloadHash) != 64 || len(e.Ciphertext) > limit {
+	if !ok || r.Protocol != 2 || e.WorkspaceID != r.WorkspaceID || e.Epoch != r.Epoch || e.RosterHash != r.Hash() || e.ChannelID == "" || len(e.Key) < 1 || len(e.Key) > 128 || len(e.Capsule) < 32 || len(e.Capsule) > 128*1024 || len(e.PayloadHash) != 64 || len(e.Ciphertext) > limit {
 		return errors.New("invalid MLS envelope context")
 	}
 	if len(e.Ciphertext) > 0 && PayloadHash(e.Ciphertext) != e.PayloadHash {

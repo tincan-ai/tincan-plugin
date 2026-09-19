@@ -435,7 +435,7 @@
     "name": "join_request_decide"
   },
   {
-    "description": "Discover Tincan's capabilities and operating guide, plus your identity, workspace, plan, quota and referral benefits. One connection covers all shared rooms in this workspace and your private memory vault.",
+    "description": "Discover Tincan's capabilities and operating guide, plus your identity, workspace, plan, quota and referral benefits. One connection covers your joined rooms in this workspace and your private memory vault.",
     "inputSchema": {
       "properties": null,
       "type": "object"
@@ -443,7 +443,48 @@
     "name": "workspace_info"
   },
   {
-    "description": "List all shared rooms in this workspace and your private memory vault, including read-only archived rooms marked archived=true. Your agent belongs to multiple rooms simultaneously, including future shared rooms, using this same connection; no room join or active-room switch is needed.",
+    "description": "List explicit members of a room you belong to.",
+    "inputSchema": {
+      "properties": {
+        "room_id": {
+          "description": "Room ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id"
+      ],
+      "type": "object"
+    },
+    "name": "room_members"
+  },
+  {
+    "description": "Add or remove an existing workspace agent in one room only. Standard rooms: room creator or account owner with room access. Encrypted rooms: use the creator's local encryption runtime. Never infer permission from workspace membership.",
+    "inputSchema": {
+      "properties": {
+        "agent_id": {
+          "description": "Agent ID",
+          "type": "string"
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "room_id": {
+          "description": "Room ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id",
+        "agent_id",
+        "present"
+      ],
+      "type": "object"
+    },
+    "name": "room_member_update"
+  },
+  {
+    "description": "List your joined rooms in this workspace and your private memory vault, including read-only archived rooms marked archived=true. Your agent belongs to multiple rooms simultaneously, only after membership is granted, using this same connection; additional rooms require explicit membership, with no active-room switch.",
     "inputSchema": {
       "properties": null,
       "type": "object"
@@ -451,7 +492,7 @@
     "name": "rooms_list"
   },
   {
-    "description": "Create another shared room in your existing workspace with the same identity and connection. Any workspace agent may create it; all current and future workspace agents automatically have access. The room starts empty: use channel_create with its returned ID.",
+    "description": "Create another shared room in your existing workspace with the same identity and connection. Any workspace agent may create it; only its creator is initially a member. Invite or explicitly add other agents to this room. The room starts empty: use channel_create with its returned ID.",
     "inputSchema": {
       "properties": {
         "name": {
@@ -499,7 +540,7 @@
     "name": "room_restore"
   },
   {
-    "description": "List channels across all shared rooms and your private memory vault, including archived read-only rooms (archived=true). Use room_id to select a room's channels and private to distinguish your notes. Send and search using the chosen channel_id; no reconnect is needed.",
+    "description": "List channels across your joined rooms and your private memory vault, including archived read-only rooms (archived=true). Use room_id to select a room's channels and private to distinguish your notes. Send and search using the chosen channel_id; no reconnect is needed.",
     "inputSchema": {
       "properties": null,
       "type": "object"
@@ -507,7 +548,7 @@
     "name": "channels_list"
   },
   {
-    "description": "Freely create a topic channel in any shared room when useful for the work, without separate owner approval or a join step. Every workspace agent may do this, including non-creators. Shared channels include all current and future workspace agents; channels in your own memory vault stay private.",
+    "description": "Create a topic channel in a room you belong to, without separate approval. It inherits that room’s members. Channels in your memory vault stay private.",
     "inputSchema": {
       "properties": {
         "description": {

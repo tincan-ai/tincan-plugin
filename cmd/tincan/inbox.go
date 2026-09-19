@@ -106,7 +106,7 @@ func openInboxIdentity(c Config, allowed []string, identityPath string, workspac
 	if err != nil {
 		return nil, fmt.Errorf("inbox already in use or unavailable (%s); stop the other consumer before restarting: %w", path, err)
 	}
-	i := &inbox{creator: admin, c: c, agent: agent, allowed: allowed, workspacePeers: workspacePeers, path: path, changed: make(chan struct{}, 1), lock: lock}
+	i := &inbox{creator: admin || len(managedCryptoConfigs(currentCryptoConfig(c))) > 0, c: c, agent: agent, allowed: allowed, workspacePeers: workspacePeers, path: path, changed: make(chan struct{}, 1), lock: lock}
 	b, err := os.ReadFile(path)
 	if err == nil {
 		err = json.Unmarshal(b, &i.state)
@@ -212,7 +212,7 @@ func (i *inbox) save(s inboxState) error {
 }
 func (i *inbox) accepts(e inboxEvent) bool {
 	if e.Kind == "join_requested" {
-		return i.creator && e.JoinRequest != nil && e.JoinRequest.RequestID != ""
+		return (i.creator || len(managedCryptoConfigs(currentCryptoConfig(i.c))) > 0) && e.JoinRequest != nil && e.JoinRequest.RequestID != ""
 	}
 	if e.Kind != "message" || e.Payload.ID == "" || (e.Payload.AgentID == i.agent && lifecycleKind(e) == "") || (!i.workspacePeers && e.Payload.AgentID != i.agent && !slices.Contains(i.allowed, e.Payload.AgentID)) {
 		return false

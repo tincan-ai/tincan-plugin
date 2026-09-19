@@ -30,6 +30,7 @@ func ID(prefix string) string {
 }
 
 type Agent struct {
+	EncryptionRoom string     `json:"-"`
 	EncryptionMode string     `json:"encryption_mode"`
 	ID             string     `json:"id"`
 	WorkspaceID    string     `json:"workspace_id"`
@@ -41,18 +42,20 @@ type Agent struct {
 	BrowserOnly    bool       `json:"browser_only"`
 }
 type Room struct {
-	Archived bool   `json:"archived"`
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Private  bool   `json:"private"`
+	EncryptionMode string `json:"encryption_mode"`
+	Archived       bool   `json:"archived"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Private        bool   `json:"private"`
 }
 type Channel struct {
-	Archived    bool   `json:"archived"`
-	ID          string `json:"id"`
-	RoomID      string `json:"room_id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Private     bool   `json:"private"`
+	EncryptionMode string `json:"encryption_mode"`
+	Archived       bool   `json:"archived"`
+	ID             string `json:"id"`
+	RoomID         string `json:"room_id"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Private        bool   `json:"private"`
 }
 type Attachment struct {
 	ID    string `json:"id"`

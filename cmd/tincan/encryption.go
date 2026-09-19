@@ -15,10 +15,12 @@ import (
 	"github.com/tincan-ai/tincan-plugin/internal/core"
 	"github.com/tincan-ai/tincan-plugin/internal/e2ee"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,33 +30,37 @@ import (
 // Only the private path, never keys, travels through Config or a tool response.
 // The file lock protects replay state and retries across independent processes.
 type cryptoState struct {
-	CommittedAdmissions map[string]bool                 `json:"committed_admissions,omitempty"`
-	AdmittedDevices     map[string]string               `json:"admitted_devices,omitempty"`
-	AutomaticInvites    bool                            `json:"automatic_invites,omitempty"`
-	AdmissionInvites    map[string]savedAdmissionInvite `json:"admission_invites,omitempty"`
-	JoinAdmission       *e2ee.AdmissionProof            `json:"join_admission,omitempty"`
-	Identity            e2ee.Identity                   `json:"identity"`
-	Root                []byte                          `json:"root"`
-	Server              string                          `json:"server"`
-	WorkspaceID         string                          `json:"workspace_id"`
-	AgentID             string                          `json:"agent_id"`
-	Epoch               int64                           `json:"epoch"`
-	RosterHash          string                          `json:"roster_hash"`
-	Protocol            int                             `json:"protocol,omitempty"`
-	KeyPackage          []byte                          `json:"key_package,omitempty"`
-	MLS                 json.RawMessage                 `json:"mls,omitempty"`
-	PrivateMLS          json.RawMessage                 `json:"private_mls,omitempty"`
-	MLSEpoch            int64                           `json:"mls_epoch,omitempty"`
-	SyncSeq             int64                           `json:"sync_seq,omitempty"`
-	ActiveRoster        e2ee.Roster                     `json:"active_roster,omitempty"`
-	PendingRoster       *pendingMLSRoster               `json:"pending_roster,omitempty"`
-	Outbox              map[string]savedSend            `json:"outbox,omitempty"`
-	Archive             map[string][]byte               `json:"history_archive,omitempty"`
-	SearchIndex         map[string][]byte               `json:"history_search_index,omitempty"`
-	Consumed            map[string]bool                 `json:"consumed_capsules,omitempty"`
-	Rejected            map[string]rejectedMLSMessage   `json:"rejected_messages,omitempty"`
-	MessagesSinceUpdate int                             `json:"messages_since_update,omitempty"`
-	LastMLSUpdate       time.Time                       `json:"last_mls_update,omitempty"`
+	RoomJoinReceipt      string                          `json:"room_join_receipt,omitempty"`
+	RoomID               string                          `json:"room_id,omitempty"`
+	PendingRoom          string                          `json:"pending_room,omitempty"`
+	InitialPlainChannels []string                        `json:"initial_plain_channels,omitempty"`
+	CommittedAdmissions  map[string]bool                 `json:"committed_admissions,omitempty"`
+	AdmittedDevices      map[string]string               `json:"admitted_devices,omitempty"`
+	AutomaticInvites     bool                            `json:"automatic_invites,omitempty"`
+	AdmissionInvites     map[string]savedAdmissionInvite `json:"admission_invites,omitempty"`
+	JoinAdmission        *e2ee.AdmissionProof            `json:"join_admission,omitempty"`
+	Identity             e2ee.Identity                   `json:"identity"`
+	Root                 []byte                          `json:"root"`
+	Server               string                          `json:"server"`
+	WorkspaceID          string                          `json:"workspace_id"`
+	AgentID              string                          `json:"agent_id"`
+	Epoch                int64                           `json:"epoch"`
+	RosterHash           string                          `json:"roster_hash"`
+	Protocol             int                             `json:"protocol,omitempty"`
+	KeyPackage           []byte                          `json:"key_package,omitempty"`
+	MLS                  json.RawMessage                 `json:"mls,omitempty"`
+	PrivateMLS           json.RawMessage                 `json:"private_mls,omitempty"`
+	MLSEpoch             int64                           `json:"mls_epoch,omitempty"`
+	SyncSeq              int64                           `json:"sync_seq,omitempty"`
+	ActiveRoster         e2ee.Roster                     `json:"active_roster,omitempty"`
+	PendingRoster        *pendingMLSRoster               `json:"pending_roster,omitempty"`
+	Outbox               map[string]savedSend            `json:"outbox,omitempty"`
+	Archive              map[string][]byte               `json:"history_archive,omitempty"`
+	SearchIndex          map[string][]byte               `json:"history_search_index,omitempty"`
+	Consumed             map[string]bool                 `json:"consumed_capsules,omitempty"`
+	Rejected             map[string]rejectedMLSMessage   `json:"rejected_messages,omitempty"`
+	MessagesSinceUpdate  int                             `json:"messages_since_update,omitempty"`
+	LastMLSUpdate        time.Time                       `json:"last_mls_update,omitempty"`
 }
 
 var cryptoMu sync.Mutex
@@ -252,6 +258,27 @@ func cryptoConnectionInput(ctx context.Context, c Config, invite string, input m
 	return err
 }
 func ensureCrypto(ctx context.Context, c Config, st *cryptoState) error {
+	if st.RoomJoinReceipt != "" {
+		value, err := rawCallContext(ctx, c, "POST", "/e2ee/join/status", map[string]string{"receipt": st.RoomJoinReceipt})
+		if err != nil {
+			return err
+		}
+		var result struct {
+			Status string `json:"status"`
+			RoomID string `json:"room_id"`
+		}
+		if err = decodeValue(value, &result); err != nil {
+			return err
+		}
+		if result.Status != "joined" {
+			return errors.New("room admission is " + result.Status + "; resume after the creator admits this device")
+		}
+		if result.RoomID != st.RoomID {
+			return errors.New("room admission scope changed")
+		}
+		st.RoomJoinReceipt = ""
+	}
+
 	var me struct {
 		Agent core.Agent `json:"agent"`
 	}
@@ -262,13 +289,42 @@ func ensureCrypto(ctx context.Context, c Config, st *cryptoState) error {
 	if err = decodeValue(v, &me); err != nil {
 		return err
 	}
-	if me.Agent.EncryptionMode != "e2ee" {
-		return errors.New("encrypted connection refused a plaintext workspace; no fallback")
-	}
 	if st.WorkspaceID != "" && (st.WorkspaceID != me.Agent.WorkspaceID || st.AgentID != me.Agent.ID) {
 		return errors.New("encryption identity does not match this connection")
 	}
 	st.WorkspaceID, st.AgentID = me.Agent.WorkspaceID, me.Agent.ID
+	if st.RoomID == "" && st.Epoch == 0 && st.PendingRoster == nil {
+		value, e := rawCallContext(ctx, c, "GET", "/rooms", nil)
+		if e != nil {
+			return e
+		}
+		var rooms []core.Room
+		if e = decodeValue(value, &rooms); e != nil {
+			return e
+		}
+		for _, room := range rooms {
+			if !strings.HasPrefix(room.ID, "rm_mls_") {
+				continue
+			}
+			scoped := c
+			scoped.EncryptionRoom = room.ID
+			value, e = rawCallContext(ctx, scoped, "GET", "/e2ee/roster", nil)
+			if e != nil {
+				continue
+			}
+			var pin struct {
+				Root []byte `json:"root"`
+			}
+			if decodeValue(value, &pin) == nil && bytes.Equal(pin.Root, st.Root) {
+				st.RoomID = room.ID
+				if e = privateJSON(c.CryptoPath, st); e != nil {
+					return e
+				}
+				break
+			}
+		}
+	}
+	c.EncryptionRoom = st.RoomID
 	var status struct {
 		Epoch    int64  `json:"epoch"`
 		Root     []byte `json:"root"`
@@ -288,7 +344,16 @@ func ensureCrypto(ctx context.Context, c Config, st *cryptoState) error {
 		return errors.New("workspace encryption protocol changed; no downgrade is allowed")
 	}
 	if st.Protocol == 2 {
-		return ensureMLS(ctx, c, st, status.Epoch)
+		if err := ensureMLS(ctx, c, st, status.Epoch); err != nil {
+			return err
+		}
+		if st.PendingRoom != "" && st.RoomID == "" {
+			if err := registerEncryptedRoom(ctx, c, st, st.PendingRoom); err != nil {
+				return err
+			}
+			st.PendingRoom = ""
+		}
+		return nil
 	}
 	if status.Epoch == 0 {
 		d, err := st.Identity.Device(st.AgentID)
@@ -329,6 +394,9 @@ func cryptoRoster(ctx context.Context, c Config, st *cryptoState, epoch int64) (
 		return out.Roster, err
 	}
 	r := out.Roster
+	if r.RoomID != st.RoomID {
+		return r, errors.New("encryption room scope changed")
+	}
 	if err = r.Verify(st.Root, st.WorkspaceID); err != nil {
 		return r, err
 	}
@@ -340,6 +408,7 @@ func cryptoRoster(ctx context.Context, c Config, st *cryptoState, epoch int64) (
 			return r, errors.New("encryption membership rollback detected")
 		}
 		st.Epoch, st.RosterHash = r.Epoch, r.Hash()
+		st.ActiveRoster = r
 	}
 	return r, nil
 }
@@ -379,6 +448,12 @@ func pinnedRecipients(ctx context.Context, c Config, st *cryptoState, r e2ee.Ros
 			return nil, errors.New("device no longer authorized")
 		}
 		return []e2ee.Device{d}, nil
+	}
+	if room := r.ChannelRoom(channel); room != "" {
+		if !r.RoomHas(room, st.AgentID) {
+			return nil, errors.New("this device is not a member of the encrypted room")
+		}
+		return r.RoomDevices(room), nil
 	}
 	recipients, err := cryptoRecipients(ctx, c, st, r, channel)
 	if err != nil {
@@ -510,7 +585,10 @@ var errBeforeJoin = errors.New("message predates this device's membership")
 func decryptMessage(ctx context.Context, c Config, st *cryptoState, m *core.Message) error {
 	e := m.Encrypted
 	if e == nil {
-		return errors.New("plaintext message rejected in encrypted workspace")
+		if plainCryptoChannel(st, m.ChannelID) {
+			return nil
+		}
+		return errors.New("plaintext message rejected in encrypted room")
 	}
 	if e.Kind != "message" || e.WorkspaceID != st.WorkspaceID || e.ChannelID != m.ChannelID || e.SenderID != m.AgentID || e.MessageID() != m.ID || !sameStringList(e.Mentions, m.Mentions) || !equalJSON(e.ReplyTo, m.ReplyTo) {
 		return errors.New("encrypted message routing was modified")
@@ -541,7 +619,7 @@ func decryptMessage(ctx context.Context, c Config, st *cryptoState, m *core.Mess
 		m.EncryptionError = e2ee.ErrMLSApplicationRejected.Error()
 		return nil
 	}
-	if _, ok := r.Device(st.AgentID); !ok {
+	if _, ok := r.Device(st.AgentID); !ok || (e.RoomID != "" && !r.RoomHas(e.RoomID, st.AgentID)) {
 		if e.Version != 2 {
 			return errBeforeJoin
 		}
@@ -603,6 +681,53 @@ func cryptoMessageValue(ctx context.Context, c Config, st *cryptoState, v any) (
 	return m, nil
 }
 func encryptedCall(ctx context.Context, c Config, method, path string, v any) (any, error) {
+	var err error
+	c, err = routeCryptoCall(c, path, v)
+	if err != nil {
+		return nil, err
+	}
+	// Metadata and standard-room operations do not depend on any MLS group.
+	u, _ := url.Parse(path)
+	if path != "/invites" && path != "/messages" && u.Path != "/messages" {
+		return rawCallContext(ctx, c, method, path, v)
+	}
+	if channel := u.Query().Get("channel_id"); strings.HasPrefix(channel, "ch_plain_") {
+		return rawCallContext(ctx, c, method, path, v)
+	}
+	if method == "POST" && path == "/messages" {
+		var in core.SendInput
+		_ = decodeValue(v, &in)
+		if strings.HasPrefix(in.ChannelID, "ch_plain_") {
+			return rawCallContext(ctx, c, method, path, v)
+		}
+	}
+
+	if method == "GET" && u.Path == "/messages" && u.Query().Get("channel_id") == "" {
+		return cryptoHistory(ctx, c, nil, path)
+	}
+
+	if method == "POST" && path == "/invites" {
+		var input struct {
+			RoomID string `json:"room_id"`
+		}
+		_ = decodeValue(v, &input)
+		if !strings.HasPrefix(input.RoomID, "rm_mls_") {
+			value, e := rawCallContext(ctx, c, "GET", "/rooms", nil)
+			if e != nil {
+				return nil, e
+			}
+			var rooms []core.Room
+			if e = decodeValue(value, &rooms); e != nil {
+				return nil, e
+			}
+			for _, room := range rooms {
+				if room.ID == input.RoomID && room.EncryptionMode == "standard" {
+					return rawCallContext(ctx, c, method, path, v)
+				}
+			}
+		}
+	}
+
 	return withCrypto(ctx, c, func(st *cryptoState) (any, error) {
 		if err := ensureCrypto(ctx, c, st); err != nil {
 			return nil, err
@@ -611,6 +736,9 @@ func encryptedCall(ctx context.Context, c Config, method, path string, v any) (a
 			var in core.SendInput
 			if err := decodeValue(v, &in); err != nil {
 				return nil, err
+			}
+			if plainCryptoChannel(st, in.ChannelID) {
+				return rawCallContext(ctx, c, method, path, v)
 			}
 			return cryptoSend(ctx, c, st, in)
 		}
@@ -622,6 +750,9 @@ func encryptedCall(ctx context.Context, c Config, method, path string, v any) (a
 			return nil, err
 		}
 		if method == "POST" && path == "/invites" {
+			if m, ok := out.(map[string]any); ok && m["encryption_mode"] == "standard" {
+				return out, nil
+			}
 			m, ok := out.(map[string]any)
 			if ok {
 				raw, _ := m["url"].(string)
@@ -629,7 +760,13 @@ func encryptedCall(ctx context.Context, c Config, method, path string, v any) (a
 				if err := decodeValue(m["expires_at"], &expires); err != nil {
 					return nil, err
 				}
-				m["url"], err = issueCryptoInvite(st, raw, expires)
+				var requested struct {
+					RoomID string `json:"room_id"`
+				}
+				if err = decodeValue(v, &requested); err != nil {
+					return nil, err
+				}
+				m["url"], err = issueCryptoInvite(st, raw, expires, requested.RoomID)
 				if err != nil {
 					return nil, err
 				}
@@ -670,7 +807,7 @@ func cryptoHistory(ctx context.Context, c Config, st *cryptoState, path string) 
 			return nil, err
 		}
 		for _, m := range page {
-			if st.Protocol == 2 && query != "" && m.Encrypted != nil {
+			if st != nil && st.Protocol == 2 && query != "" && m.Encrypted != nil {
 				if filter, ok := st.SearchIndex[archiveID(*m.Encrypted)]; ok {
 					key, err := historyKey(c)
 					if err != nil {
@@ -681,7 +818,12 @@ func cryptoHistory(ctx context.Context, c Config, st *cryptoState, path string) 
 					}
 				}
 			}
-			if err = decryptMessage(ctx, c, st, &m); errors.Is(err, errBeforeJoin) {
+			if st == nil {
+				err = decryptRoomMessage(ctx, c, &m)
+			} else {
+				err = decryptMessage(ctx, c, st, &m)
+			}
+			if errors.Is(err, errBeforeJoin) {
 				continue
 			} else if err != nil {
 				return nil, err
@@ -737,6 +879,16 @@ type encryptedFileHeader struct {
 func cryptoUpload(ctx context.Context, c Config, st *cryptoState, channel, name string, data []byte) (any, error) {
 	if len(data) > e2ee.MaxFileBytes || len(name) == 0 || len(name) > 200 || strings.ContainsAny(name, "/\\\x00") {
 		return nil, errors.New("invalid attachment name or size")
+	}
+	if plainCryptoChannel(st, channel) {
+		res, err := requestPlainContext(ctx, c, "POST", "/uploads?"+url.Values{"channel_id": {channel}, "name": {name}}.Encode(), bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		defer res.Body.Close()
+		var at core.Attachment
+		err = json.NewDecoder(res.Body).Decode(&at)
+		return at, err
 	}
 	r, err := cryptoRoster(ctx, c, st, 0)
 	if err != nil {
@@ -794,7 +946,7 @@ func openCryptoFile(ctx context.Context, c Config, st *cryptoState, id, channel 
 	if err = e.Verify(r); err != nil {
 		return core.Attachment{}, nil, err
 	}
-	if _, ok := r.Device(st.AgentID); !ok {
+	if _, ok := r.Device(st.AgentID); !ok || (e.RoomID != "" && !r.RoomHas(e.RoomID, st.AgentID)) {
 		if e.Version != 2 {
 			return core.Attachment{}, nil, errBeforeJoin
 		}
@@ -833,13 +985,28 @@ func cryptoDownload(ctx context.Context, c Config, st *cryptoState, id, channel 
 	if err != nil {
 		return core.Attachment{}, nil, err
 	}
+	if strings.HasPrefix(id, "blob_plain_") || (channel != "" && plainCryptoChannel(st, channel)) {
+		_, params, _ := mime.ParseMediaType(res.Header.Get("Content-Disposition"))
+		return core.Attachment{ID: id, Name: params["filename"], MIME: res.Header.Get("Content-Type"), Bytes: int64(len(data))}, data, nil
+	}
 	return openCryptoFile(ctx, c, st, id, channel, data)
 }
 func encryptedRequest(ctx context.Context, c Config, method, path string, body io.Reader) (*http.Response, error) {
+	var routeErr error
+	c, routeErr = routeCryptoCall(c, path, nil)
+	if routeErr != nil {
+		return nil, routeErr
+	}
+
 	u, err := url.Parse(path)
 	if err != nil {
 		return nil, err
 	}
+	parsed, _ := url.Parse(path)
+	if method == "POST" && strings.HasPrefix(path, "/uploads") && strings.HasPrefix(parsed.Query().Get("channel_id"), "ch_plain_") {
+		return requestPlainContext(ctx, c, method, path, body)
+	}
+
 	if method == "POST" && u.Path == "/uploads" {
 		data, err := io.ReadAll(io.LimitReader(body, e2ee.MaxFileBytes+1))
 		if err != nil {
@@ -863,6 +1030,55 @@ func encryptionManage(ctx context.Context, c Config, requestID, fingerprint, rev
 	return encryptionManageMode(ctx, c, requestID, fingerprint, revoke, false)
 }
 func encryptionManageMode(ctx context.Context, c Config, requestID, fingerprint, revoke string, automatic bool) (any, error) {
+	if c.EncryptionRoom == "" && len(c.CryptoRooms) > 0 {
+		if requestID == "" && revoke == "" {
+			all := []any{}
+			for _, scoped := range managedCryptoConfigs(c) {
+				value, e := encryptionManageMode(ctx, scoped, "", "", "", automatic)
+				if e != nil {
+					return nil, e
+				}
+				var rows []any
+				if e = decodeValue(value, &rows); e != nil {
+					return nil, e
+				}
+				all = append(all, rows...)
+			}
+			return all, nil
+		}
+		if requestID != "" {
+			found := false
+			for _, scoped := range managedCryptoConfigs(c) {
+				value, e := rawCallContext(ctx, scoped, "GET", "/e2ee/requests", nil)
+				if e != nil {
+					continue
+				}
+				var rows []struct {
+					ID string `json:"id"`
+				}
+				if decodeValue(value, &rows) != nil {
+					continue
+				}
+				for _, row := range rows {
+					if row.ID == requestID {
+						c = scoped
+						found = true
+						break
+					}
+				}
+				if found {
+					break
+				}
+			}
+			if !found {
+				if automatic {
+					return nil, errManualAdmission
+				}
+				return nil, errors.New("pending request is not in an encrypted room managed by this connection")
+			}
+		}
+	}
+
 	return withCrypto(ctx, c, func(st *cryptoState) (any, error) {
 		if err := ensureCrypto(ctx, c, st); err != nil {
 			return nil, err
@@ -887,7 +1103,7 @@ func encryptionManageMode(ctx context.Context, c Config, requestID, fingerprint,
 		}
 		local, _ := st.device(st.AgentID)
 		if !bytes.Equal(local.SigningKey, st.Root) {
-			return nil, errors.New("use the workspace creator's encryption identity")
+			return nil, errors.New("use this room's creator encryption identity")
 		}
 		r, err := cryptoRoster(ctx, c, st, 0)
 		if err != nil {
@@ -895,6 +1111,9 @@ func encryptionManageMode(ctx context.Context, c Config, requestID, fingerprint,
 		}
 		next := r
 		next.Members = append([]e2ee.Device(nil), r.Members...)
+		if r.RoomMembers != nil {
+			next.RoomMembers = cloneRoomMembers(r.RoomMembers)
+		}
 		next.Epoch++
 		next.Previous = r.Hash()
 		if requestID != "" {
@@ -907,6 +1126,7 @@ func encryptionManageMode(ctx context.Context, c Config, requestID, fingerprint,
 			}
 			var requests []struct {
 				ID        string               `json:"id"`
+				RoomID    string               `json:"room_id"`
 				AgentID   string               `json:"agent_id"`
 				Device    e2ee.Device          `json:"device"`
 				Status    string               `json:"status"`
@@ -925,6 +1145,16 @@ func encryptionManageMode(ctx context.Context, c Config, requestID, fingerprint,
 					return nil, errManualAdmission
 				}
 				if req.ID == requestID && req.Status == "pending" {
+					if req.Admission != nil {
+						saved, known := st.AdmissionInvites[req.Admission.InviteHash]
+						if known && saved.RoomID != "" && saved.RoomID != req.RoomID {
+							return nil, errors.New("invitation room was changed; admission rejected")
+						}
+						if automatic && (!known || saved.RoomID == "") {
+							return nil, errManualAdmission
+						}
+					}
+
 					if automatic {
 						if err := reserveAdmission(c, st, requestID, req.Device, req.Admission); err != nil {
 							return nil, err
@@ -947,6 +1177,13 @@ func encryptionManageMode(ctx context.Context, c Config, requestID, fingerprint,
 					}
 					req.Device.AgentID = req.AgentID
 					next.Members = append(next.Members, req.Device)
+					if next.RoomMembers != nil {
+						if !r.RoomHas(req.RoomID, st.AgentID) {
+							return nil, errors.New("the creator is not a member of the invited room")
+						}
+						next.RoomMembers[req.RoomID] = append(next.RoomMembers[req.RoomID], req.AgentID)
+						sort.Strings(next.RoomMembers[req.RoomID])
+					}
 					found = true
 					break
 				}
@@ -969,6 +1206,17 @@ func encryptionManageMode(ctx context.Context, c Config, requestID, fingerprint,
 			}
 			if len(next.Members) == len(r.Members) {
 				return nil, errors.New("encrypted member not found")
+			}
+		}
+		if revoke != "" && next.RoomMembers != nil {
+			for rid, ids := range next.RoomMembers {
+				kept := []string{}
+				for _, id := range ids {
+					if id != revoke {
+						kept = append(kept, id)
+					}
+				}
+				next.RoomMembers[rid] = kept
 			}
 		}
 		if err = next.Sign(st.Identity); err != nil {
@@ -996,8 +1244,68 @@ func localToolResult(v any, err error) (*mcp.CallToolResult, error) {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(b)}}}, nil
 }
 func encryptedTool(ctx context.Context, c Config, name string, args map[string]any) (*mcp.CallToolResult, error) {
+	if len(c.CryptoRooms) > 1 && args["room_id"] == nil {
+		switch name {
+		case "encryption_rotate", "encryption_revoke", "encryption_deny", "encryption_admission_policy", "encryption_history_backup", "encryption_history_restore", "encryption_rejections":
+			return localToolResult(nil, errors.New("specify room_id to select the encrypted room"))
+		}
+	}
+
+	var routeErr error
+	c, routeErr = routeCryptoCall(c, "/", args)
+	if routeErr != nil {
+		return localToolResult(nil, routeErr)
+	}
+
 	str := func(k string) string { v, _ := args[k].(string); return v }
 	switch name {
+	case "encryption_join_room":
+		v, e := joinIndependentRoom(ctx, &c, str("invite"), func() error {
+			if c.ConnectionPath == "" {
+				return save(c)
+			}
+			data, err := os.ReadFile(c.ConnectionPath)
+			if err != nil {
+				return err
+			}
+			var saved pluginConnection
+			if err = json.Unmarshal(data, &saved); err != nil {
+				return err
+			}
+			if saved.Config.Token != c.Token || saved.Config.Server != c.Server {
+				return errors.New("saved connection changed")
+			}
+			saved.Config.CryptoRooms = c.CryptoRooms
+			saved.Config.CryptoPath = c.CryptoPath
+			return privateJSON(c.ConnectionPath, saved)
+		})
+		return localToolResult(v, e)
+
+	case "room_member_update":
+		value, err := rawCallContext(ctx, c, "GET", "/rooms", nil)
+		if err != nil {
+			return localToolResult(nil, err)
+		}
+		var rooms []core.Room
+		if err = decodeValue(value, &rooms); err != nil {
+			return localToolResult(nil, err)
+		}
+		present, ok := args["present"].(bool)
+		if !ok {
+			return localToolResult(nil, errors.New("provide present as a boolean"))
+		}
+		for _, room := range rooms {
+			if room.ID == str("room_id") && room.EncryptionMode == "e2ee" {
+				v, e := encryptedRoomMember(ctx, c, room.ID, str("agent_id"), present)
+				return localToolResult(v, e)
+			}
+		}
+		method := "DELETE"
+		if present {
+			method = "PUT"
+		}
+		v, e := rawCallContext(ctx, c, method, "/rooms/"+url.PathEscape(str("room_id"))+"/members/"+url.PathEscape(str("agent_id")), nil)
+		return localToolResult(v, e)
 	case "encryption_admission_policy":
 		var automatic *bool
 		if value, exists := args["automatic_invites"]; exists {
@@ -1047,6 +1355,11 @@ func encryptedTool(ctx context.Context, c Config, name string, args map[string]a
 		if e != nil {
 			return localToolResult(nil, e)
 		}
+		if strings.HasPrefix(str("channel_id"), "ch_plain_") {
+			v, e := cryptoUpload(ctx, c, &cryptoState{}, str("channel_id"), str("name"), data)
+			return localToolResult(v, e)
+		}
+
 		v, e := withCrypto(ctx, c, func(st *cryptoState) (any, error) {
 			if e := ensureCrypto(ctx, c, st); e != nil {
 				return nil, e
@@ -1054,18 +1367,25 @@ func encryptedTool(ctx context.Context, c Config, name string, args map[string]a
 			return cryptoUpload(ctx, c, st, str("channel_id"), str("name"), data)
 		})
 		return localToolResult(v, e)
+
 	case "attachment_download":
-		v, e := withCrypto(ctx, c, func(st *cryptoState) (any, error) {
-			if e := ensureCrypto(ctx, c, st); e != nil {
-				return nil, e
-			}
-			at, data, e := cryptoDownload(ctx, c, st, str("attachment_id"), "")
-			if e != nil {
-				return nil, e
-			}
-			return map[string]any{"attachment": at, "data": base64.StdEncoding.EncodeToString(data)}, nil
-		})
-		return localToolResult(v, e)
+		res, e := requestPlainContext(ctx, c, "GET", "/blobs/"+url.PathEscape(str("attachment_id")), nil)
+		if e != nil {
+			return localToolResult(nil, e)
+		}
+		defer res.Body.Close()
+		data, e := io.ReadAll(io.LimitReader(res.Body, e2ee.MaxFileEnvelopeBytes+1))
+		if e != nil {
+			return localToolResult(nil, e)
+		}
+		if strings.HasPrefix(str("attachment_id"), "blob_plain_") {
+			_, params, _ := mime.ParseMediaType(res.Header.Get("Content-Disposition"))
+			at := core.Attachment{ID: str("attachment_id"), Name: params["filename"], MIME: res.Header.Get("Content-Type"), Bytes: int64(len(data))}
+			return localToolResult(map[string]any{"attachment": at, "data": base64.StdEncoding.EncodeToString(data)}, nil)
+		}
+
+		at, plain, e := openRoomFile(ctx, c, str("attachment_id"), "", data)
+		return localToolResult(map[string]any{"attachment": at, "data": base64.StdEncoding.EncodeToString(plain)}, e)
 	case "encryption_requests":
 		v, e := encryptionManage(ctx, c, "", "", "")
 		return localToolResult(v, e)
@@ -1110,17 +1430,14 @@ func encryptedTool(ctx context.Context, c Config, name string, args map[string]a
 		if !ok || json.Unmarshal([]byte(content.Text), &events) != nil {
 			return localToolResult(nil, errors.New("invalid encrypted event response"))
 		}
-		out, err := withCrypto(ctx, c, func(st *cryptoState) (any, error) {
-			if err := ensureCrypto(ctx, c, st); err != nil {
-				return nil, err
-			}
+		run := func() (any, error) {
 			out := []inboxEvent{}
 			for _, event := range events {
 				if event.Kind == "message" {
 					if event.ChannelID != event.Payload.ChannelID {
 						return nil, errors.New("event routing was modified")
 					}
-					if err := decryptMessage(ctx, c, st, &event.Payload); errors.Is(err, errBeforeJoin) {
+					if err := decryptRoomMessage(ctx, c, &event.Payload); errors.Is(err, errBeforeJoin) {
 						continue
 					} else if err != nil {
 						return nil, err
@@ -1132,10 +1449,9 @@ func encryptedTool(ctx context.Context, c Config, name string, args map[string]a
 				out = append(out, event)
 			}
 			return out, nil
-		})
+		}
+		out, err := run()
 		return localToolResult(out, err)
-	case "a2a_enable", "a2a_tasks", "a2a_task_update":
-		return localToolResult(nil, errors.New("A2A content is unavailable in encrypted workspaces; use encrypted messages"))
 	}
 	session, e := remote(c)
 	if e != nil {
@@ -1146,10 +1462,7 @@ func encryptedTool(ctx context.Context, c Config, name string, args map[string]a
 }
 
 func cryptoExport(ctx context.Context, c Config, out string) error {
-	_, err := withCrypto(ctx, c, func(st *cryptoState) (any, error) {
-		if err := ensureCrypto(ctx, c, st); err != nil {
-			return nil, err
-		}
+	run := func() (any, error) {
 		res, err := requestPlainContext(ctx, c, "GET", "/export", nil)
 		if err != nil {
 			return nil, err
@@ -1168,6 +1481,35 @@ func cryptoExport(ctx context.Context, c Config, out string) error {
 		archive, err := zip.NewReader(temp, n)
 		if err != nil {
 			return nil, err
+		}
+		// Legacy standard attachments predate the blob_plain_ prefix. Match their
+		// provenance to the signed list of standard channels in the initial roster.
+		plainBlobs := map[string]bool{}
+		for _, entry := range archive.File {
+			if entry.Name != "blobs.jsonl" {
+				continue
+			}
+			src, err := entry.Open()
+			if err != nil {
+				return nil, err
+			}
+			dec := json.NewDecoder(src)
+			for {
+				var blob struct {
+					ID        string `json:"id"`
+					ChannelID string `json:"channel_id"`
+				}
+				err := dec.Decode(&blob)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					src.Close()
+					return nil, err
+				}
+				plainBlobs[blob.ID] = requirePlainChannel(ctx, c, blob.ChannelID) == nil
+			}
+			src.Close()
 		}
 		output, err := os.OpenFile(out, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 		if err != nil {
@@ -1212,7 +1554,7 @@ func cryptoExport(ctx context.Context, c Config, out string) error {
 						src.Close()
 						return nil, err
 					}
-					if err = decryptMessage(ctx, c, st, &m); errors.Is(err, errBeforeJoin) {
+					if err = decryptRoomMessage(ctx, c, &m); errors.Is(err, errBeforeJoin) {
 						locked++
 					} else if err != nil {
 						src.Close()
@@ -1240,7 +1582,12 @@ func cryptoExport(ctx context.Context, c Config, out string) error {
 				if err != nil {
 					return nil, err
 				}
-				at, plain, err := openCryptoFile(ctx, c, st, parts[1], "", data)
+				at, plain, err := openRoomFile(ctx, c, parts[1], "", data)
+				if strings.HasPrefix(parts[1], "blob_plain_") || plainBlobs[parts[1]] {
+					at = core.Attachment{ID: parts[1], Name: parts[2]}
+					plain = data
+					err = nil
+				}
 				name := entry.Name
 				if errors.Is(err, errBeforeJoin) {
 					locked++
@@ -1291,19 +1638,24 @@ func cryptoExport(ctx context.Context, c Config, out string) error {
 		}
 		complete = true
 		return nil, nil
-	})
+	}
+	_, err := run()
 	return err
 }
 func localCryptoTools() []*mcp.Tool {
 	str := func(desc string) any { return map[string]any{"type": "string", "description": desc} }
 	makeTool := func(name, desc string, props map[string]any, required ...string) *mcp.Tool {
+		if name != "encryption_join_room" {
+			props["room_id"] = str("Encrypted room to operate on; specify it for room management and recovery when this connection has multiple encrypted rooms")
+		}
 		return &mcp.Tool{Name: name, Description: desc, InputSchema: map[string]any{"type": "object", "properties": props, "required": required}}
 	}
 	return []*mcp.Tool{
+		makeTool("encryption_join_room", "Join another encrypted room with this existing workspace agent. Creates fresh local keys only for that room.", map[string]any{"invite": str("Encrypted invitation supplied by the room creator")}, "invite"),
 		makeTool("encryption_rejections", "Inspect locally quarantined encrypted messages. These messages were rejected and cannot trigger workers; their signed sender IDs remain available for review and revocation.", map[string]any{}),
-		makeTool("encryption_rotate", "Refresh the MLS workspace's group keys. The local creator performs the update; no key material enters this tool.", map[string]any{}),
+		makeTool("encryption_rotate", "Refresh this encrypted room's MLS group keys. The local creator performs the update; no key material enters this tool.", map[string]any{}),
 		makeTool("encryption_history_backup", "Save an encrypted local history backup without credentials or live MLS state. Keep its history key separately in private backup storage.", map[string]any{"out": str("Private output file path; existing files are never overwritten")}, "out"),
-		makeTool("encryption_history_restore", "Import an explicitly selected encrypted history backup after joining the same workspace. This restores history only; it never rolls back live encryption state.", map[string]any{"file": str("History backup path"), "key_file": str("Owner-only recovery key file path; never supply the key itself")}, "file", "key_file"),
+		makeTool("encryption_history_restore", "Import an explicitly selected encrypted history backup after joining the same encrypted room. This restores history only; it never rolls back live encryption state.", map[string]any{"file": str("History backup path"), "key_file": str("Owner-only recovery key file path; never supply the key itself")}, "file", "key_file"),
 		makeTool("encryption_admission_policy", "Read or change creator-local admission policy. Automatic invitations authorize one device proving possession of a client-held secret. Set automatic_invites=false to require manual fingerprint verification and invalidate outstanding automatic invitations. Only change with owner authorization.", map[string]any{"automatic_invites": map[string]any{"type": "boolean"}}),
 		makeTool("encryption_requests", "List pending encryption devices. Verify the fingerprint through the existing conversation with the joining device.", map[string]any{}),
 		makeTool("encryption_approve", "Approve one device only after the account owner authorizes its verified fingerprint. The local creator signs membership; private keys never enter tool arguments.", map[string]any{"request_id": str("Pending request ID"), "fingerprint": str("Full 64-character fingerprint obtained from the joining device through a trusted conversation")}, "request_id", "fingerprint"),
@@ -1321,6 +1673,7 @@ func isLocalCryptoTool(name string) bool {
 	return false
 }
 func decryptInboxEvent(ctx context.Context, c Config, event *inboxEvent) (bool, error) {
+	c = currentCryptoConfig(c)
 	if c.CryptoPath != "" && event.Kind == "join_requested" && event.JoinRequest != nil {
 		_, err := encryptionManageMode(ctx, c, event.JoinRequest.RequestID, "", "", true)
 		if err == nil {
@@ -1336,6 +1689,15 @@ func decryptInboxEvent(ctx context.Context, c Config, event *inboxEvent) (bool, 
 	if event.ChannelID != event.Payload.ChannelID || event.Seq <= 0 {
 		return false, errors.New("encrypted event routing was modified")
 	}
+	if event.Payload.Encrypted == nil {
+		return true, decryptRoomMessage(ctx, c, &event.Payload)
+	}
+	var routeErr error
+	c, routeErr = cryptoConfigForChannel(c, event.ChannelID)
+	if routeErr != nil {
+		return false, routeErr
+	}
+
 	v, err := withCrypto(ctx, c, func(st *cryptoState) (any, error) {
 		if err := ensureCrypto(ctx, c, st); err != nil {
 			return nil, err

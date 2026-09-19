@@ -42,6 +42,8 @@ func fixture(t *testing.T, events []inboxEvent) (Config, *[]core.SendInput) {
 					fmt.Fprintf(w, "data: %s\n\n", b)
 				}
 			}
+		case "/api/v1/channels":
+			fmt.Fprint(w, `[{"id":"channel","encryption_mode":"standard"}]`)
 		case "/api/v1/messages":
 			var in core.SendInput
 			_ = json.NewDecoder(r.Body).Decode(&in)
@@ -339,6 +341,8 @@ func TestReplyIntentSurvivesNetworkFailure(t *testing.T) {
 			e := event(2, "peer", "self")
 			b, _ := json.Marshal(e)
 			fmt.Fprintf(w, "data: %s\n\n", b)
+		case "/api/v1/channels":
+			fmt.Fprint(w, `[{"id":"channel","encryption_mode":"standard"}]`)
 		case "/api/v1/messages":
 			var in core.SendInput
 			_ = json.NewDecoder(r.Body).Decode(&in)

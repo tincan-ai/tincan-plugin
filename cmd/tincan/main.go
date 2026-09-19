@@ -24,10 +24,14 @@ import (
 )
 
 type Config struct {
-	CryptoPath  string            `json:"crypto_path,omitempty"`
-	PendingJoin *core.JoinReceipt `json:"pending_join,omitempty"`
-	Server      string            `json:"server"`
-	Token       string            `json:"token"`
+	PendingEncryptedRoom *pendingRoomCreation `json:"pending_encrypted_room,omitempty"`
+	CryptoRooms          map[string]string    `json:"crypto_rooms,omitempty"`
+	EncryptionRoom       string               `json:"encryption_room,omitempty"`
+	ConnectionPath       string               `json:"connection_path,omitempty"`
+	CryptoPath           string               `json:"crypto_path,omitempty"`
+	PendingJoin          *core.JoinReceipt    `json:"pending_join,omitempty"`
+	Server               string               `json:"server"`
+	Token                string               `json:"token"`
 }
 
 var cliIdentity string
@@ -99,17 +103,41 @@ func request(c Config, method, path string, body io.Reader) (*http.Response, err
 	return requestContext(context.Background(), c, method, path, body)
 }
 func requestContext(ctx context.Context, c Config, method, path string, body io.Reader) (*http.Response, error) {
+	c = currentCryptoConfig(c)
 	if c.CryptoPath != "" {
 		return encryptedRequest(ctx, c, method, path, body)
 	}
 	if method == "POST" && strings.HasPrefix(path, "/uploads") {
-		if err := requirePlainClient(ctx, c); err != nil {
+		u, _ := url.Parse(path)
+		if err := requirePlainChannel(ctx, c, u.Query().Get("channel_id")); err != nil {
 			return nil, err
 		}
 	}
 	return requestPlainContext(ctx, c, method, path, body)
 }
 func requestPlainContext(ctx context.Context, c Config, method, path string, body io.Reader) (*http.Response, error) {
+	if strings.HasPrefix(path, "/e2ee/") && !strings.HasPrefix(path, "/e2ee/join") && c.CryptoPath != "" {
+		room := c.EncryptionRoom
+		if room == "" {
+			var saved struct {
+				RoomID string `json:"room_id"`
+			}
+			if b, err := os.ReadFile(c.CryptoPath); err == nil {
+				_ = json.Unmarshal(b, &saved)
+				room = saved.RoomID
+			}
+		}
+		if room != "" {
+			u, err := url.Parse(path)
+			if err != nil {
+				return nil, err
+			}
+			q := u.Query()
+			q.Set("room_id", room)
+			u.RawQuery = q.Encode()
+			path = u.String()
+		}
+	}
 	if e := validateServer(c.Server); e != nil {
 		return nil, e
 	}
@@ -134,11 +162,16 @@ func call(c Config, method, path string, v any) (any, error) {
 	return callContext(context.Background(), c, method, path, v)
 }
 func callContext(ctx context.Context, c Config, method, path string, v any) (any, error) {
+	c = currentCryptoConfig(c)
 	if c.CryptoPath != "" {
 		return encryptedCall(ctx, c, method, path, v)
 	}
-	if strings.HasPrefix(path, "/messages") {
-		if err := requirePlainClient(ctx, c); err != nil {
+	if method == "POST" && path == "/messages" {
+		var in core.SendInput
+		if err := decodeValue(v, &in); err != nil {
+			return nil, err
+		}
+		if err := requirePlainChannel(ctx, c, in.ChannelID); err != nil {
 			return nil, err
 		}
 	}
@@ -323,9 +356,9 @@ func main() {
 	workspace := f.String("workspace", "Agents' Room", "Workspace name")
 	token := f.String("token", "", "Existing agent credential (prefer --token-stdin)")
 	tokenStdin := f.Bool("token-stdin", false, "Read credential from stdin")
-	encrypted := f.Bool("e2ee", true, "Encrypt new workspaces by default; use --e2ee=false for a standard workspace. Existing connections and invitations keep their mode.")
+	encrypted := f.Bool("e2ee", false, "With room-create, explicitly encrypt this new room on a paid plan. Leave unset when connecting.")
 	fingerprint := f.String("fingerprint", "", "Verified joining device fingerprint")
-	revokeAgent := f.String("agent", "", "Agent ID to revoke from an encrypted workspace")
+	revokeAgent := f.String("agent", "", "Agent ID to remove from the selected encrypted room")
 	invite := f.String("invite", "", "One-time invite token or URL")
 	ref := f.String("referral", "", "Referral code")
 	channel := f.String("channel", "", "Channel ID")
@@ -414,7 +447,7 @@ func main() {
 			}
 		}
 	}
-	if encryptionExplicit && *encrypted && c.Token != "" && c.CryptoPath == "" {
+	if encryptionExplicit && *encrypted && cmd != "room-create" && c.Token != "" && c.CryptoPath == "" {
 		fatal(errors.New("E2EE can only be selected when creating a new workspace"))
 	}
 	if cmd == "connect" {
@@ -476,7 +509,22 @@ func main() {
 	}
 	var v any
 	var e error
+	if len(c.CryptoRooms) > 1 && *room == "" {
+		switch cmd {
+		case "encryption-rotate", "encryption-revoke", "encryption-deny", "encryption-admission-policy", "encryption-history-backup", "encryption-history-restore", "encryption-rejections":
+			fatal(errors.New("specify --room to select the encrypted room"))
+		}
+	}
+	if strings.HasPrefix(cmd, "encryption-") && *room != "" {
+		var err error
+		c, err = cryptoConfigForRoom(c, *room)
+		if err != nil {
+			fatal(err)
+		}
+	}
 	switch cmd {
+	case "encryption-join-room":
+		v, e = joinIndependentRoom(context.Background(), &c, *invite, func() error { return save(c) })
 	case "encryption-rotate":
 		v, e = rotateMLS(context.Background(), c)
 	case "encryption-history-backup":
@@ -530,7 +578,11 @@ func main() {
 	case "channel-create":
 		v, e = call(c, "POST", "/channels", map[string]string{"name": *name, "room_id": *room})
 	case "room-create":
-		v, e = call(c, "POST", "/rooms", map[string]string{"name": *name})
+		if *encrypted {
+			v, e = createLocalEncryptedRoom(context.Background(), &c, configPath()+".e2ee.json", *name, func() error { return save(c) })
+		} else {
+			v, e = call(c, "POST", "/rooms", map[string]string{"name": *name})
+		}
 	case "room-archive", "room-restore":
 		if !strings.HasPrefix(*room, "rm_") || strings.ContainsAny(*room, "/?#") {
 			e = errors.New("provide a room ID with --room")
@@ -615,7 +667,8 @@ func main() {
 		}
 		defer session.Close()
 		if contentTool(args[0]) {
-			if err = requirePlainClient(context.Background(), c); err != nil {
+			cid, _ := arg["channel_id"].(string)
+			if err = requirePlainChannel(context.Background(), c, cid); err != nil {
 				fatal(err)
 			}
 		}
@@ -736,7 +789,9 @@ func bridge(c Config) error {
 				return localToolResult(nil, errors.New("this tool requires an encrypted workspace"))
 			}
 			if contentTool(name) {
-				if err := requirePlainClient(ctx, c); err != nil {
+				m, _ := args.(map[string]any)
+				cid, _ := m["channel_id"].(string)
+				if err := requirePlainChannel(ctx, c, cid); err != nil {
 					return localToolResult(nil, err)
 				}
 			}
