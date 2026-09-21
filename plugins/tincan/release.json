@@ -1,37 +1,37 @@
 {
-  "version": "0.2.8",
+  "version": "0.2.10",
   "server": "https://app.gotincan.com",
   "harness": "portable",
   "targets": {
     "darwin-amd64": {
       "path": "bin/darwin-amd64/tincan",
-      "sha256": "c900da282726529a105bb346e5311e5eb0b97425cded8d1dea1e0e63820a3d42"
+      "sha256": "7d77d5ebfb9d5df78e353d1e593cd9b5a5d8885ad2f2fea632df89cdf343b18d"
     },
     "darwin-arm64": {
       "path": "bin/darwin-arm64/tincan",
-      "sha256": "62e6cd453afce9a720c69af479b8c7b5e6dadb72dbb029faa4fb3da4bfab6a97"
+      "sha256": "d996af2d5064ba907ab02938a3869456cbe5122f0fe0edea2edc6d853b0cedfd"
     },
     "linux-amd64": {
       "path": "bin/linux-amd64/tincan",
-      "sha256": "74e14b8516940012c823103a3118cef092de4bfaa2a7b9ed2729a1d492ac23d7"
+      "sha256": "faad3757df06c8411ae28ae1116eaad25b3f294e4b0755e3ac1ef2d2cbcfe07f"
     },
     "linux-arm64": {
       "path": "bin/linux-arm64/tincan",
-      "sha256": "3c109a62ba5396ea491f19e01e48f6c140d7d748c27a47525ac4690d066e046b"
+      "sha256": "b0c9d0d348e424a380eddfd3853cd8e1f85e1da025f5ef375928996bb98b4523"
     },
     "windows-amd64": {
       "path": "bin/windows-amd64/tincan.exe",
-      "sha256": "3f0439c0dca5c261d45d4ca85515c28412161ebb69fa1356fb61a6c15187bbb7"
+      "sha256": "27d223354fa2421f1518c985fc594423b6ce5108121de5dbd36b919c310980be"
     },
     "windows-arm64": {
       "path": "bin/windows-arm64/tincan.exe",
-      "sha256": "70b97ed20f74d600e841d225f5f46db6240166ee91fdc7d21a4d0ab2d287569b"
+      "sha256": "f5587024909b2ca013659ee1d1ab00703289802ea47bcc43b35da9b745609e28"
     }
   },
   "files": {
-    ".claude-plugin/plugin.json": "c42ef73da716e31def7b3472831cfc07ee231c686963b0069abbee413ad88a5d",
-    ".codex-plugin/plugin.json": "575bcde4940a85a69e40c819b567fa265d5469f97897bcbd07c1bcbfcd5801d1",
-    ".cursor-plugin/plugin.json": "91ebdbc24de8c8f2fc1cfb1c0e22db4ebdcaff917517503c6d0626194b023368",
+    ".claude-plugin/plugin.json": "908ca3dd9cf8e493ec7d7f368d11db08c2184a20d10daed043e4fb1d3d1f9700",
+    ".codex-plugin/plugin.json": "53d95e009b517f8ed5bf19bc3475949a412e736323b683fed5c7f8c8a84812e5",
+    ".cursor-plugin/plugin.json": "8a074a9af31320ff02cd40af409d390befefcfea2d089eca16d8434c885af7fa",
     ".mcp.json": "8baa4e3a5a4c257ec9ac856a073d92b46ba5c470e6957d714349c482be65beda",
     "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
     "README.md": "2b0cc40ee16bef09511b5237ab2ed6e1c8151cf2ef06889188f39c7d2884994e",
@@ -41,15 +41,15 @@
     "assets/logo-1024.png": "8ffe3bfa997bda42348fca3415b4ffdccf274d04a5c46ef74bab54fc295d0901",
     "assets/logo-dark.png": "a540389fd158092c48bcc912f94a66b9bcad12316325493b13f4a285f1fdf8b9",
     "assets/logo.png": "3e57ecb5b03dbb49747da041885d41dfbc52d721a20616c94a692e1ed56e5ef9",
-    "bin/darwin-amd64/tincan": "c900da282726529a105bb346e5311e5eb0b97425cded8d1dea1e0e63820a3d42",
-    "bin/darwin-arm64/tincan": "62e6cd453afce9a720c69af479b8c7b5e6dadb72dbb029faa4fb3da4bfab6a97",
-    "bin/linux-amd64/tincan": "74e14b8516940012c823103a3118cef092de4bfaa2a7b9ed2729a1d492ac23d7",
-    "bin/linux-arm64/tincan": "3c109a62ba5396ea491f19e01e48f6c140d7d748c27a47525ac4690d066e046b",
+    "bin/darwin-amd64/tincan": "7d77d5ebfb9d5df78e353d1e593cd9b5a5d8885ad2f2fea632df89cdf343b18d",
+    "bin/darwin-arm64/tincan": "d996af2d5064ba907ab02938a3869456cbe5122f0fe0edea2edc6d853b0cedfd",
+    "bin/linux-amd64/tincan": "faad3757df06c8411ae28ae1116eaad25b3f294e4b0755e3ac1ef2d2cbcfe07f",
+    "bin/linux-arm64/tincan": "b0c9d0d348e424a380eddfd3853cd8e1f85e1da025f5ef375928996bb98b4523",
     "bin/tincan": "e6cbafacd289a59b029c2f5b557bb1c1ce739698afae612003995ad337cbc1e7",
     "bin/tincan-mls.wasm": "894b1aacd7c1a5a1ededb09d9bf12fe74ccfca1b1a9be7cb3a82b6cb4815e253",
-    "bin/tincan.exe": "c016a61bbb880979c583be98d4601833f0bca4f5497f10eb5221a2b78886c03c",
-    "bin/windows-amd64/tincan.exe": "3f0439c0dca5c261d45d4ca85515c28412161ebb69fa1356fb61a6c15187bbb7",
-    "bin/windows-arm64/tincan.exe": "70b97ed20f74d600e841d225f5f46db6240166ee91fdc7d21a4d0ab2d287569b",
+    "bin/tincan.exe": "d66e1809512c2f0c155b386664da8e88a44b813d807fc8a51d8df04955819046",
+    "bin/windows-amd64/tincan.exe": "27d223354fa2421f1518c985fc594423b6ce5108121de5dbd36b919c310980be",
+    "bin/windows-arm64/tincan.exe": "f5587024909b2ca013659ee1d1ab00703289802ea47bcc43b35da9b745609e28",
     "clients/copilot.json": "356ef360fd8bf3d766ed91af9e9eb12f87a134b029dadb6d00c0b861cf57b9e8",
     "clients/cursor.json": "1d4828203c7796c30237df0f07106a359dac0e384559211fd334980cb08ec602",
     "clients/hermes.json": "c9dcf91e5053b3ed07e57f52fea8b3552ff83625df91b8f0402d99ce5f48ae25",
@@ -60,7 +60,7 @@
     "docs/CLAUDE_WAKE.md": "1f9587973be1b2479c9cf91ffa217081bc412adddf88500488a568325d3936ba",
     "docs/CLIENTS.md": "e5a3b03ca39d67aa8f4ae23d816a515fb5e7d3537c7840957224159a55eb2127",
     "docs/CLOUD_AGENTS.md": "08172baa7ce15602078e82fa4ee27ef9cb863a35599482cfb8e6606b0240cc04",
-    "docs/E2EE.md": "95ae26dbb85f816b2707ae73c3952f4b6a55b530e5129aff2f7674145c5d9c3a",
+    "docs/E2EE.md": "7502f6e8f39e3c42fc7c2de96a08236d710fd16bcfd11a660fe16aaf82eefaf3",
     "docs/HARNESS_DELIVERY.md": "7e11e6ccf4f95e037e1e0863363a9f917e15b3464981308666439060d5fc7217",
     "docs/ONBOARDING.md": "e756f16aa10b5a8733b2d20b9f8938583e53cd35026b82c296b6356fb30fa8d7",
     "docs/ONBOARDING_RELEASE_GATE.md": "0786245a3b2c652d88f586e2a819048a6cd4456d53b93e95bffe04293a83f7c5",
@@ -72,13 +72,13 @@
     "native/openclaw/index.mjs": "37a8ae5caf0543bd7e6bcba24a5b984fffc080814ee219ee86ee3afc7aabfad8",
     "native/openclaw/index.test.mjs": "7d48e5f0f8d2f25ebc990389af397c9131ab2c7d95c630e9bbd53a9e0e3a91d7",
     "native/openclaw/sidecar.mjs": "f34b52fb4ff24f320ab37663f9dbdc4749ccde2c1561ed3ebc9db0916e484993",
-    "onboarding-contract.json": "b8d84106c5b47b867e58700e36976994532e4c288e0e9b71612aa2464429959d",
+    "onboarding-contract.json": "91f944dae95cf2280d2e6f0ae153db2ba3c75870a7ec55c768ea69b2a87b6a83",
     "openclaw.plugin.json": "e6f2ec8505a96f67664658b718e7b292d262c5da70df411c755e760a89bc24f0",
-    "package.json": "85581171c0773c385efbb888e93a7af1a4ef57ca301c57b057e5ab7556d4ae87",
-    "plugin.json": "a593f612e6a68018005f09317e5cf6a1c3f038941698b6aa875f914d8bfe58f9",
-    "plugin.yaml": "8f92f7ce304c4b4046c1de0cf42369622b0812969d6931392cd34dcc2ef43edd",
+    "package.json": "abe49b55344a6bac5f009d27dbeacfe87c6a51d952f62dc4e91f3eeca42d4785",
+    "plugin.json": "81cae36c9243f7676dff8725ef14302d6a7fad6f45af67958244df3897484115",
+    "plugin.yaml": "9c8ae575be57e2cac5c236ace783e558165955ce8bb44689a3e5559efac470f4",
     "scripts/launch.sh": "efef1abc113a4b6b4a39f60ec89e110f0d3d7a6beac95e043fb10a96d2d3b7f2",
-    "sdk/README.md": "6ae540c036a5af28e0af9c34f1dd992b7d40e323647d1ca7948971cc1065b69a",
+    "sdk/README.md": "4d154df61ca271fe73f7fd0fe77d352b43e487cc3a82e8ccc280f81e5a419884",
     "sdk/python/adapters/__init__.py": "228af752e1490ebfc9d518d5f77cae20ab1becb2b33e15b7d8833b8734ed4b91",
     "sdk/python/adapters/common.py": "b616a56d62f4a0bfc4c0770df26582dc1e6aa154db3a54cf2e08877ff1fa4325",
     "sdk/python/adapters/copilot.py": "f37d339ee7af0c9135febeb3832d7c79ef37306dd10c93022492eb70fa06e9db",
@@ -91,9 +91,9 @@
     "sdk/python/test_harness_adapters.py": "929e6ad5c61376e827bb0f0bf2980f0fd13f5b0a549a6e747896ea3646c3c813",
     "sdk/python/test_tincan.py": "260eef8c2711771ffc13ed16770b051b1b833b391083cd75a714a67193773035",
     "sdk/python/tincan.py": "3051dd0d959eb76452114c3259f3a9d6f0319276a6354afe08f839d6b020e303",
-    "skills/tincan-communicate/SKILL.md": "230b8d17374411b2c20ce364c4675f7d070017082c8789fc88f0d7a20695b50f",
-    "skills/tincan-connect/SKILL.md": "01060d4abc2c6cc8dbca7a8fe923066256a5e669623ad457d4af1bb86cd604f5",
-    "skills/tincan-connect/references/setup-contract.md": "87489611494db44d6e107e02331834dade360b91eeeb8436e4739391ffad7284",
+    "skills/tincan-communicate/SKILL.md": "c34a720e988cda395af16dfead03d01da55b3c69775c88305bcee2941f736fbb",
+    "skills/tincan-connect/SKILL.md": "52f7a8fe26acffb176d1e537f5bf0d7ea8d3905beadc2c4a56e69b087feb8db1",
+    "skills/tincan-connect/references/setup-contract.md": "a9c0997ebab7bf1794b68b79381d5347590b8364a897e220dfce99e6c3d1c168",
     "skills/tincan-listen/SKILL.md": "76c9824b758fbac14efdef5149b7a42c7b2156cdace44c4ede390d9adf91ad04",
     "skills/tincan-listen/references/persistent-listener.md": "f126ba56ae7e6bbe06ee64777e3406699953798d81cd8693920cd73fdca5f3f2",
     "skills/tincan-listen/references/remote-mcp.md": "c178a970b1b3deb5726eccad6f1bca573f024137e493200d412fe093f3b215da",
@@ -102,5 +102,5 @@
   },
   "protocol": "tincan/1",
   "cgo": false,
-  "onboarding_digest": "4a78a7591bb88473febd6995c566b0e47a79dcddc83c9e77891bf351b35173d5"
+  "onboarding_digest": "d7e76b2ca81124fe13a2f8425c6a0b4956be0277ec57f1c02ef00322d385b480"
 }
