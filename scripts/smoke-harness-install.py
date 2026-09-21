@@ -44,7 +44,7 @@ def main():
             commands = [['claude', 'plugin', 'marketplace', 'add', str(market)],
                         ['claude', 'plugin', 'install', 'tincan@tincan']]
         for command in commands:
-            result = subprocess.run(command, env=env, cwd=root, capture_output=True, text=True, timeout=45)
+            result = subprocess.run(command, env=env, cwd=root, capture_output=True, text=True, encoding='utf-8', timeout=45)
             assert result.returncode == 0, result.stdout + result.stderr
         if args.host == 'codex':
             installed = Path(json.loads(result.stdout)['installedPath'])
@@ -59,11 +59,11 @@ def main():
             # Use the host's effective command, not command_for(), which repairs
             # relative paths and can hide a real Codex startup failure.
             resolved = subprocess.run([args.codex, 'mcp', 'get', 'tincan', '--json'],
-                                      env=env, cwd=root, capture_output=True, text=True, timeout=15)
+                                      env=env, cwd=root, capture_output=True, text=True, encoding='utf-8', timeout=15)
             assert resolved.returncode == 0, resolved.stderr
             config = json.loads(resolved.stdout)
             transport = config['transport']
-            release = json.loads((installed / 'release.json').read_text())
+            release = json.loads((installed / 'release.json').read_text(encoding='utf-8'))
             if release.get('harness') == 'codex':
                 assert config.get('tool_timeout_sec', 0) > 3600, config
                 assert transport['args'] == ['plugin', '--host', 'codex'], transport

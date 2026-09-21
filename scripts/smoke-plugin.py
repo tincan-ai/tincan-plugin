@@ -23,11 +23,11 @@ def extract(archive, dest):
 
 def command_for(plugin, manifest):
     path = plugin / manifest
-    manifest_data = json.loads(path.read_text())
+    manifest_data = json.loads(path.read_text(encoding='utf-8'))
     if manifest == '.codex-plugin/plugin.json':
         servers = manifest_data.get('mcpServers', './mcp.json')
         if isinstance(servers, str):
-            manifest_data = json.loads((plugin / servers).read_text())
+            manifest_data = json.loads((plugin / servers).read_text(encoding='utf-8'))
     config = manifest_data['mcpServers']['tincan']
     command = config['command'].replace('${CLAUDE_PLUGIN_ROOT}', str(plugin))
     if command.startswith('./'): command = str(plugin / command[2:])
@@ -55,7 +55,7 @@ def probe(command, env, cwd, driver=()):
     ]
     # Keep stdin open until the response arrives: EOF can cancel in-flight MCP requests.
     child = subprocess.Popen([*driver, *command], cwd=cwd, env=env, stdin=subprocess.PIPE,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8')
     import threading
     watchdog = threading.Timer(20, child.kill)
     watchdog.start()
@@ -90,7 +90,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='tincan package with spaces ') as temporary:
         root = Path(temporary)
         plugin = extract(args.archive, root)
-        metadata = json.loads((plugin / 'release.json').read_text())
+        metadata = json.loads((plugin / 'release.json').read_text(encoding='utf-8'))
         if args.universal: assert len(metadata['targets']) == 6
         for name, digest in metadata['files'].items():
             assert hashlib.sha256((plugin / name).read_bytes()).hexdigest() == digest, name
@@ -101,31 +101,31 @@ def main():
         env = clean_env(state)
         assert (plugin / 'bin/tincan-mls.wasm').read_bytes()[:4] == b'\x00asm'
         crypto = subprocess.run([*driver, *command_for(plugin, '.mcp.json')[:1], 'encryption-check'],
-                                text=True, capture_output=True, env=env, timeout=20)
+                                text=True, encoding='utf-8', capture_output=True, env=env, timeout=20)
         assert crypto.returncode == 0 and json.loads(crypto.stdout)['ok'], crypto.stderr
         for name in ('.codex-plugin/plugin.json', '.mcp.json', 'mcp.json'):
             initialized = probe(command_for(plugin, name), env, root, driver)
             assert initialized['result']['serverInfo']['version'] == metadata['version']
         # Launch each documented client entry, including paths containing spaces.
         for host in ('cursor', 'copilot', 'openclaw', 'hermes'):
-            config = json.loads((plugin / 'clients' / (host + '.json')).read_text())
+            config = json.loads((plugin / 'clients' / (host + '.json')).read_text(encoding='utf-8'))
             servers = config['mcp']['servers'] if host == 'openclaw' else config['mcp_servers' if host == 'hermes' else 'mcpServers']
             entry = servers['tincan']
             assert entry['args'] == ['plugin', '--host', host]
             command = entry['command'].replace('/absolute/path/to/tincan', str(plugin))
             result = probe([command, *entry['args']], env, root, driver)
             assert 'claude/channel' not in result['result'].get('capabilities', {}).get('experimental', {})
-        versions = {json.loads((plugin / name).read_text())['version']
+        versions = {json.loads((plugin / name).read_text(encoding='utf-8'))['version']
                     for name in ('plugin.json', '.claude-plugin/plugin.json', '.codex-plugin/plugin.json', '.cursor-plugin/plugin.json', 'package.json') if (plugin / name).exists()}
         assert versions == {metadata['version']}, versions
         for name in ('openclaw.plugin.json', 'plugin.yaml', 'native/openclaw/index.mjs',
                      'native/hermes/adapter.py', 'sdk/python/run_cursor.py', 'sdk/python/run_copilot.py',
                      'hooks/claude.json', 'hooks/cursor.json', 'com.github.copilot/hooks/hooks.json'):
             assert (plugin / name).is_file(), name
-        assert json.loads((plugin / '.claude-plugin/plugin.json').read_text())['hooks'] == './hooks/claude.json'
+        assert json.loads((plugin / '.claude-plugin/plugin.json').read_text(encoding='utf-8'))['hooks'] == './hooks/claude.json'
         for host, event in (('copilot', 'SessionStart'), ('cursor', 'SessionStart'), ('claude', 'SessionStart')):
             result = subprocess.run([*driver, *command_for(plugin, '.mcp.json')[:1], 'harness-hook', host, event],
-                                    input=json.dumps({'session_id': 'smoke-session'}), text=True, capture_output=True, env=env, timeout=10)
+                                    input=json.dumps({'session_id': 'smoke-session'}), text=True, encoding='utf-8', capture_output=True, env=env, timeout=10)
             assert result.returncode == 0 and 'hook_session_id' in result.stdout, result.stderr
 
         assert not (state / 'connections').exists(), 'discovery created credentials before the first prompt'
@@ -133,14 +133,14 @@ def main():
         command = [*driver, *command_for(plugin, '.mcp.json')[:1]]
         result = subprocess.run(command + ['sidecar', '--host', 'smoke', '--state-dir', str(state / 'sidecar')],
                                 env=env, cwd=root, input='{"id":1,"method":"tools"}\n',
-                                capture_output=True, text=True, timeout=10, check=True)
+                                capture_output=True, text=True, encoding='utf-8', timeout=10, check=True)
         assert json.loads(result.stdout.splitlines()[0])['protocol'] == 'tincan/1'
         assert not (state / 'sidecar').exists()
         result = subprocess.run(command + ['not-a-command'], env=env, cwd=root, capture_output=True, timeout=10)
         assert result.returncode != 0, 'launcher swallowed child failure'
         for binary in metadata['targets'].values():
             path = plugin / binary['path']; path.rename(str(path) + '.missing')
-        failure = subprocess.run(command, env=env, cwd=root, capture_output=True, text=True, timeout=10)
+        failure = subprocess.run(command, env=env, cwd=root, capture_output=True, text=True, encoding='utf-8', timeout=10)
         assert failure.returncode == 126 and 'Reinstall' in failure.stderr, failure.stderr
         print(f'Universal plugin verified on {platform.system()} {platform.machine()}: MCP, sidecar, version, checksums, exit status, and no setup-time credentials.')
 
