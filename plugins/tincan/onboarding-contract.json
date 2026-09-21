@@ -1,23 +1,23 @@
 {
   "schema_version": 1,
-  "digest": "d9f5d55a73dd2afcb432c586a7b2daf39d11ab16c6cb4c3c4a52c6af26439c80",
+  "digest": "d7e76b2ca81124fe13a2f8425c6a0b4956be0277ec57f1c02ef00322d385b480",
   "sources": {
     "tests/fixtures/onboarding/muse-cases.json": "8fda19e08db5e517e1253828d35479ab06f2b24f25ea9032d551499e46386ed8",
     "apps/marketing/src/content/onboarding.ts": "f3d83b7824c4db1507c198fe8c91d9c5dae6eb94e0359c518b38019215f3a7f8",
     "apps/shared/setup-prompt.mjs": "5568de0f571eae84a0bf32f0871c257d11ee0d14717a6599b26daa80d5281b8a",
     "apps/shared/agent-prompts.ts": "8272dafd77fb85483455e479901218c275296bfd0de7f8b63222c1c20ec5a98c",
     "apps/web/src/connection-presets.ts": "880220ce54a2aa67678e19982cae75afb01a5d7bf7d7c368eb67b20f9fad431c",
-    "internal/core/instructions.go": "3818b76af18a0049b3bd96e8d587f2598eec4ba7ccd51f3435f15da48ba9b7d7",
+    "internal/core/instructions.go": "895c37b40d2bfc0cfd25947294dcddf334d7531656a73fed5403ecab4dc51a12",
     "internal/core/agent-guides/setup.template.md": "613b4058432c8cb1289ddf3e8ab36aabcca2c193df8ac7f4ba158ee4b7b3011a",
     "internal/core/agent-guides/muse.md": "eba716654cbc10062286a2f1e5eb35374595438d27a485d0826222c1dcf9951c",
     "internal/core/agent-guides/instinct.md": "cca9a69db79fcf26f4371299e2b2ee7d34389d415bb0205f9a79aed864d16fdf",
     "internal/core/agent-guides/hosts.md": "2652cd1f76544bc2c90f94e1a02540b6849f332c534c4a87f04dd144df9a8ba3",
     "internal/core/agent-guides/install.md": "882ab7e9903bbc719de0f1713cfd4d6857635f12c8325bef27b95c2d614f2f7d",
-    "internal/core/agent-guides/remote.md": "306a40921d5b30ffcffe8f31be66dbd130d3a2b41066e26f81cc82512b3115a8",
+    "internal/core/agent-guides/remote.md": "aac65dda4daa07404f3904a24484305079bd55aabb2bea8a896cd24859e7d88a",
     "internal/core/agent-guides/recovery.md": "b1e79b0d303815a6a93c5a8c66613b658ca2a7dd3cde9b415e5fd53f66870f67",
     "internal/core/agent-guides/delivery.template.md": "049211815afeadae9ba827fe9d03a017b765300cbdbda36811d389e2943dceab",
-    "plugins/tincan/skills/tincan-connect/SKILL.md": "a3ec0184c17b3cac2f35a973c73c3381076a44154b750c4c3c63ff85ec063e76",
-    "plugins/tincan/skills/tincan-communicate/SKILL.md": "9de68f05ecf380149e2c573dba12cc8882ca861ed0b0afc0c0906c231815c5d4",
+    "plugins/tincan/skills/tincan-connect/SKILL.md": "52f7a8fe26acffb176d1e537f5bf0d7ea8d3905beadc2c4a56e69b087feb8db1",
+    "plugins/tincan/skills/tincan-communicate/SKILL.md": "c34a720e988cda395af16dfead03d01da55b3c69775c88305bcee2941f736fbb",
     "plugins/tincan/skills/tincan-listen/SKILL.md": "76c9824b758fbac14efdef5149b7a42c7b2156cdace44c4ede390d9adf91ad04"
   }
 }
