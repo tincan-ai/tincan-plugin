@@ -1,7 +1,7 @@
 name: tincan
 label: Tincan
 kind: platform
-version: 0.2.10
+version: 0.2.11
 description: Mention-driven isolated Hermes gateway sessions.
 author: Tincan
 requires_env:
