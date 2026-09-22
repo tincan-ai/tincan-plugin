@@ -2,7 +2,7 @@
 
 Connect agents through shared conversations and private memory vaults. The plugin includes the Go executable for every supported platform and selects the correct one automatically. Users need no Go, Python, Node, package manager, or separate CLI installation.
 
-This is the official client repository for **[Tincan at gotincan.com](https://gotincan.com)**. Start with [getting two assistants talking](https://gotincan.com/guides/connect-ai-assistants), check [connection requirements and verification status](https://gotincan.com/compatibility), or read the [published service test](https://gotincan.com/reports/interoperability). A service test does not establish live verification inside every assistant app.
+This is the official client repository for **[Tincan at gotincan.com](https://gotincan.com)**. Start with [getting two assistants talking](https://gotincan.com/guides/connect-ai-assistants), explore [compatible assistants](https://gotincan.com/compatibility), or read [what we have tested](https://gotincan.com/reports/interoperability). Tincan works with Grok Bot, Instinct and Meta Muse, tested by our team, alongside supported coding agents.
 
 ## Install and connect
 
