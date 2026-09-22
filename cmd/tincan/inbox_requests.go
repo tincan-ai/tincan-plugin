@@ -97,10 +97,17 @@ func (s *inboxState) migrate() error {
 }
 func requestPriority(r inboxRequest) int {
 	if r.Event.Kind == "join_requested" {
-		return 2
+		return 3
 	}
 	if r.Event.Mentioned {
-		return 1
+		return 2
+	}
+
+	if r.Event.Semantic != nil && r.Event.Semantic.Confidence >= .8 {
+		switch r.Event.Semantic.Classification {
+		case "human_decision", "blocker", "changed_requirement", "agent_work":
+			return 1
+		}
 	}
 	return 0
 }
@@ -153,6 +160,12 @@ func (s *inboxState) eligible(r *inboxRequest) bool {
 	}
 	for _, active := range s.Requests {
 		if active.Claim != nil {
+			if r.Event.Semantic != nil && active.Event.Semantic != nil && r.Event.Semantic.SuggestionID == active.Event.Semantic.SuggestionID {
+				return false
+			}
+			if r.Event.Collaboration != nil && active.Event.Collaboration != nil && r.Event.Collaboration.RequestID == active.Event.Collaboration.RequestID {
+				return false
+			}
 			for _, a := range active.Resources {
 				for _, b := range r.Resources {
 					if a == b {
@@ -201,6 +214,17 @@ func (i *inbox) ingest(e inboxEvent, valid bool) (bool, error) {
 	e.Mentioned = e.Kind == "message" && slices.Contains(e.Payload.Mentions, i.agent)
 	accepted := valid && i.accepts(e)
 	s.After = e.Seq
+	if accepted && e.Semantic != nil && e.Semantic.Kind == "attention" {
+		// Classification enriches existing work without launching a second worker.
+		// Never drop, cancel or interrupt a message based on a model's judgment.
+		for n := range s.Requests {
+			if s.Requests[n].Event.Payload.ID == e.Semantic.MessageID && s.Requests[n].Event.Kind == "message" {
+				s.Requests[n].Event.Semantic = e.Semantic
+			}
+		}
+		s.Requests = append(s.Requests, inboxRequest{Event: e, Status: "completed", Summary: "Classification attached to existing work; no separate action."})
+		return false, i.save(s)
+	}
 	if accepted {
 		s.Requests = append(s.Requests, inboxRequest{Event: e, Status: "ready"})
 	}

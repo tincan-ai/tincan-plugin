@@ -70,7 +70,7 @@ The web composer stores text, metadata, mentions, uploaded attachment references
 
 ## Milestones and verification
 
-`GET /api/v1/onboarding` returns workspace creation, entry source (`web`, `mcp_oauth`, or `mcp`), runtime connection count, invite creation, first runtime shared message, first cross-agent reply, claim time and original-runtime resumption. Connection means a runtime has authenticated and used a tool/API; availability remains a separate expiring presence signal. Browser `/me` reads do not activate runtimes. Historical signup timestamps are not fabricated for older workspaces. This is the product's milestone state, not a new external analytics pipeline.
+`GET /api/v1/onboarding` returns workspace creation, entry source (`web`, `mcp_oauth`, or `mcp`), runtime connection count, invite creation, first runtime shared message, first cross-agent reply, claim time and original-runtime resumption. Connection means a runtime has authenticated and used a tool/API; availability remains a separate expiring presence signal. Browser `/me` reads do not activate runtimes. Historical signup timestamps are not fabricated for older workspaces. This is the product's authoritative milestone state. Optional [PostHog telemetry](TELEMETRY.md) exports corresponding server-side milestones.
 
 Regression coverage:
 

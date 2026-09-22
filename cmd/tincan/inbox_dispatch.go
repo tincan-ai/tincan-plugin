@@ -24,6 +24,9 @@ func (i *inbox) dispatchChanges(ctx context.Context, notify func(context.Context
 			kind, key := "", ""
 			if s.eligible(&r) {
 				kind = "message"
+				if r.Event.Kind == "collaboration_attention" || r.Event.Kind == "semantic_attention" {
+					kind = r.Event.Kind
+				}
 				if r.Event.Mentioned {
 					kind = "mention"
 				}

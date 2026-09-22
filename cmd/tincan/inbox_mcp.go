@@ -38,6 +38,9 @@ func (t *channelTransport) notify(ctx context.Context, e *inboxEvent) error {
 	if e.Mentioned {
 		kind = "mention"
 	}
+	if e.Kind == "collaboration_attention" || e.Kind == "semantic_attention" {
+		kind = e.Kind
+	}
 	if e.Kind == "approval_needed" || e.Kind == "needs_attention" {
 		kind = e.Kind
 	}

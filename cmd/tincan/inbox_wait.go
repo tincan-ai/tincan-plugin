@@ -104,6 +104,12 @@ func (i *inbox) waitMention(ctx context.Context, worker string, duration time.Du
 		}
 		if r := candidate; r != nil {
 			result := map[string]any{"event_seq": r.Event.Seq, "kind": r.Event.Kind, "mentioned": r.Event.Mentioned, "experimental": true, "status": "event", "instructions": "Claim this message before acting. Use inbox_outcome to save completion or safely suspend a commitment, then continue listening. Other commitments do not block this message."}
+			if r.Event.Kind == "semantic_attention" {
+				result["instructions"] = semanticReviewInstructions
+			}
+			if r.Event.Kind == "collaboration_attention" {
+				result["instructions"] = collaborationReviewInstructions
+			}
 			if lifecycleKind(r.Event) != "" {
 				result["kind"] = "connection_notice"
 				result["status"] = "connection_notice"

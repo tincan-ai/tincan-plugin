@@ -19,12 +19,14 @@ import (
 )
 
 type inboxEvent struct {
-	Mentioned   bool         `json:"mentioned,omitempty"`
-	JoinRequest *joinNotice  `json:"join_request,omitempty"`
-	Seq         int64        `json:"seq"`
-	Kind        string       `json:"kind"`
-	ChannelID   string       `json:"channel_id"`
-	Payload     core.Message `json:"payload"`
+	Semantic      *semanticNotice      `json:"semantic,omitempty"`
+	Collaboration *collaborationNotice `json:"collaboration,omitempty"`
+	Mentioned     bool                 `json:"mentioned,omitempty"`
+	JoinRequest   *joinNotice          `json:"join_request,omitempty"`
+	Seq           int64                `json:"seq"`
+	Kind          string               `json:"kind"`
+	ChannelID     string               `json:"channel_id"`
+	Payload       core.Message         `json:"payload"`
 }
 type inboxState struct {
 	Revision int             `json:"revision,omitempty"`
@@ -211,11 +213,24 @@ func (i *inbox) save(s inboxState) error {
 	return nil
 }
 func (i *inbox) accepts(e inboxEvent) bool {
+	if e.Kind == "semantic_attention" {
+		return e.Semantic != nil && e.Semantic.OwnerAgentID == i.agent && e.Semantic.SuggestionID != ""
+	}
+	if e.Kind == "collaboration_attention" {
+		return e.Collaboration != nil && e.Collaboration.OwnerAgentID == i.agent && e.Collaboration.RequestID != ""
+	}
 	if e.Kind == "join_requested" {
 		return (i.creator || len(managedCryptoConfigs(currentCryptoConfig(i.c))) > 0) && e.JoinRequest != nil && e.JoinRequest.RequestID != ""
 	}
 	if e.Kind != "message" || e.Payload.ID == "" || (e.Payload.AgentID == i.agent && lifecycleKind(e) == "") || (!i.workspacePeers && e.Payload.AgentID != i.agent && !slices.Contains(i.allowed, e.Payload.AgentID)) {
 		return false
+	}
+	// The server emits a private correlation notice before the shared message
+	// event. Review that request once instead of also starting a peer reply job.
+	for _, r := range i.state.Requests {
+		if r.Event.Collaboration != nil && r.Event.Collaboration.MessageID == e.Payload.ID {
+			return false
+		}
 	}
 	var meta map[string]json.RawMessage
 	_ = json.Unmarshal(e.Payload.Metadata, &meta)
@@ -370,6 +385,14 @@ func (i *inbox) reply(seq int64, text string, claim ...string) (any, error) {
 	if lifecycleKind(r.Event) != "" {
 		i.mu.Unlock()
 		return nil, errors.New("present this connection notice to the user, then inbox_ack; do not reply to the peer")
+	}
+	if r.Event.Kind == "semantic_attention" {
+		i.mu.Unlock()
+		return nil, errors.New("resolve the private semantic suggestion and acknowledge; do not reply to this notice")
+	}
+	if r.Event.Kind == "collaboration_attention" {
+		i.mu.Unlock()
+		return nil, errors.New("review this private request with request_get/request_update, then inbox_ack; do not reply to a private notice")
 	}
 	if r.Event.Kind == "join_requested" {
 		i.mu.Unlock()

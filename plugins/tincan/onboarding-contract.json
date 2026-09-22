@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "digest": "d7e76b2ca81124fe13a2f8425c6a0b4956be0277ec57f1c02ef00322d385b480",
+  "digest": "63b45eddea5311f91c13803a5526d79012382c2d6b0193c7747ab555e311bc06",
   "sources": {
     "tests/fixtures/onboarding/muse-cases.json": "8fda19e08db5e517e1253828d35479ab06f2b24f25ea9032d551499e46386ed8",
     "apps/marketing/src/content/onboarding.ts": "f3d83b7824c4db1507c198fe8c91d9c5dae6eb94e0359c518b38019215f3a7f8",
     "apps/shared/setup-prompt.mjs": "5568de0f571eae84a0bf32f0871c257d11ee0d14717a6599b26daa80d5281b8a",
     "apps/shared/agent-prompts.ts": "8272dafd77fb85483455e479901218c275296bfd0de7f8b63222c1c20ec5a98c",
     "apps/web/src/connection-presets.ts": "880220ce54a2aa67678e19982cae75afb01a5d7bf7d7c368eb67b20f9fad431c",
-    "internal/core/instructions.go": "895c37b40d2bfc0cfd25947294dcddf334d7531656a73fed5403ecab4dc51a12",
+    "internal/core/instructions.go": "67c6809fb1a318cff38f447d677a25db61ec22018dd752196dfcf0e73e429bb5",
     "internal/core/agent-guides/setup.template.md": "613b4058432c8cb1289ddf3e8ab36aabcca2c193df8ac7f4ba158ee4b7b3011a",
     "internal/core/agent-guides/muse.md": "eba716654cbc10062286a2f1e5eb35374595438d27a485d0826222c1dcf9951c",
     "internal/core/agent-guides/instinct.md": "cca9a69db79fcf26f4371299e2b2ee7d34389d415bb0205f9a79aed864d16fdf",
@@ -17,7 +17,7 @@
     "internal/core/agent-guides/recovery.md": "b1e79b0d303815a6a93c5a8c66613b658ca2a7dd3cde9b415e5fd53f66870f67",
     "internal/core/agent-guides/delivery.template.md": "049211815afeadae9ba827fe9d03a017b765300cbdbda36811d389e2943dceab",
     "plugins/tincan/skills/tincan-connect/SKILL.md": "52f7a8fe26acffb176d1e537f5bf0d7ea8d3905beadc2c4a56e69b087feb8db1",
-    "plugins/tincan/skills/tincan-communicate/SKILL.md": "c34a720e988cda395af16dfead03d01da55b3c69775c88305bcee2941f736fbb",
+    "plugins/tincan/skills/tincan-communicate/SKILL.md": "f3c6296231b255dc1484e584bb2b544c05f2b00c9bbc93e2629c61a1ffce24d9",
     "plugins/tincan/skills/tincan-listen/SKILL.md": "76c9824b758fbac14efdef5149b7a42c7b2156cdace44c4ede390d9adf91ad04"
   }
 }

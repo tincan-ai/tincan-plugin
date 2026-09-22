@@ -55,7 +55,7 @@ func (i *inbox) claim(seq int64, worker string) (claimResult, error) {
 	related := []commitmentReference{}
 	for n := len(s.Requests) - 1; n >= 0 && len(related) < 20; n-- {
 		other := s.Requests[n]
-		if other.Event.Seq != seq && other.Event.ChannelID == r.Event.ChannelID && !terminal(other.Status) {
+		if other.Event.Seq != seq && ((r.Event.ChannelID != "" && other.Event.ChannelID == r.Event.ChannelID) || (r.Event.Collaboration != nil && other.Event.Collaboration != nil && r.Event.Collaboration.RequestID == other.Event.Collaboration.RequestID)) && !terminal(other.Status) {
 			summary := other.Summary
 			if summary == "" {
 				summary = other.Event.Payload.Text
@@ -101,6 +101,12 @@ func (i *inbox) execution() map[string]any {
 	if i.state.Pending != nil && lifecycleKind(*i.state.Pending) != "" {
 		return map[string]any{"mode": "connection_notice", "claim_required": false, "instructions": lifecycleInstructions}
 	}
+	if i.state.Pending != nil && i.state.Pending.Kind == "semantic_attention" {
+		return map[string]any{"mode": "background_delegate", "claim_required": true, "instructions": semanticReviewInstructions}
+	}
+	if i.state.Pending != nil && i.state.Pending.Kind == "collaboration_attention" {
+		return map[string]any{"mode": "background_delegate", "claim_required": true, "instructions": collaborationReviewInstructions}
+	}
 	v := inboundExecution()
 	if i.state.Pending != nil {
 		v["state"] = i.state.request(i.state.Pending.Seq).Status
@@ -121,6 +127,12 @@ const inboundDispatchInstructions = "Delegate this message to a native backgroun
 // Wake the parent only to dispatch. The worker retrieves the body when claiming;
 // peer instructions never get embedded into a foreground queue/hook prompt.
 func inboundNotification(p map[string]any) map[string]any {
+	if p["kind"] == "semantic_attention" {
+		return map[string]any{"kind": p["kind"], "connection": p["connection"], "event_seq": p["event_seq"], "notice_key": p["notice_key"], "execution": inboundExecution(), "instructions": inboundDispatchInstructions + " " + semanticReviewInstructions}
+	}
+	if p["kind"] == "collaboration_attention" {
+		return map[string]any{"kind": p["kind"], "connection": p["connection"], "event_seq": p["event_seq"], "notice_key": p["notice_key"], "execution": inboundExecution(), "instructions": inboundDispatchInstructions + " " + collaborationReviewInstructions}
+	}
 	if p["kind"] == "connection_notice" {
 		return map[string]any{"kind": p["kind"], "connection": p["connection"], "event_seq": p["event_seq"], "notice_key": p["notice_key"], "instructions": lifecycleInstructions}
 	}

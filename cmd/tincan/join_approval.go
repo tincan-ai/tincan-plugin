@@ -157,6 +157,20 @@ func (e *inboxEvent) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
+	if e.Kind == "semantic_attention" {
+		if e.Semantic == nil {
+			e.Semantic = &semanticNotice{}
+			return json.Unmarshal(raw.Payload, e.Semantic)
+		}
+		return nil
+	}
+	if e.Kind == "collaboration_attention" {
+		if e.Collaboration == nil {
+			e.Collaboration = &collaborationNotice{}
+			return json.Unmarshal(raw.Payload, e.Collaboration)
+		}
+		return nil
+	}
 	if e.Kind == "join_requested" {
 		if e.JoinRequest == nil {
 			e.JoinRequest = &joinNotice{}
