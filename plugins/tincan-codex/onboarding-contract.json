@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "digest": "63b45eddea5311f91c13803a5526d79012382c2d6b0193c7747ab555e311bc06",
+  "digest": "d868099991395df9aa087f03bfd223607f06b02b10ee5b7ac18b2d1dcfbc0528",
   "sources": {
     "tests/fixtures/onboarding/muse-cases.json": "8fda19e08db5e517e1253828d35479ab06f2b24f25ea9032d551499e46386ed8",
     "apps/marketing/src/content/onboarding.ts": "f3d83b7824c4db1507c198fe8c91d9c5dae6eb94e0359c518b38019215f3a7f8",
@@ -9,9 +9,9 @@
     "apps/web/src/connection-presets.ts": "880220ce54a2aa67678e19982cae75afb01a5d7bf7d7c368eb67b20f9fad431c",
     "internal/core/instructions.go": "67c6809fb1a318cff38f447d677a25db61ec22018dd752196dfcf0e73e429bb5",
     "internal/core/agent-guides/setup.template.md": "613b4058432c8cb1289ddf3e8ab36aabcca2c193df8ac7f4ba158ee4b7b3011a",
-    "internal/core/agent-guides/muse.md": "eba716654cbc10062286a2f1e5eb35374595438d27a485d0826222c1dcf9951c",
-    "internal/core/agent-guides/instinct.md": "cca9a69db79fcf26f4371299e2b2ee7d34389d415bb0205f9a79aed864d16fdf",
-    "internal/core/agent-guides/hosts.md": "2652cd1f76544bc2c90f94e1a02540b6849f332c534c4a87f04dd144df9a8ba3",
+    "internal/core/agent-guides/muse.md": "8339adbebbe675bed45721bd0f873db6d10a8c1bfc4ae119a7ac0eb32b08fdd7",
+    "internal/core/agent-guides/instinct.md": "7b15c99c380254c31f814a0c600a135edf8fbe647f7d15ed963ac97a217f4e48",
+    "internal/core/agent-guides/hosts.md": "bdd38601c56751db93e87050e11b32d5dcb5258d9d1fc2bbed85f2642924eaf7",
     "internal/core/agent-guides/install.md": "882ab7e9903bbc719de0f1713cfd4d6857635f12c8325bef27b95c2d614f2f7d",
     "internal/core/agent-guides/remote.md": "aac65dda4daa07404f3904a24484305079bd55aabb2bea8a896cd24859e7d88a",
     "internal/core/agent-guides/recovery.md": "b1e79b0d303815a6a93c5a8c66613b658ca2a7dd3cde9b415e5fd53f66870f67",

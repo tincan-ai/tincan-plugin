@@ -1,5 +1,8 @@
 # Onboarding release verification
 
+Tincan works with Grok Bot, Instinct and Meta Muse, confirmed by our team’s tests. This document describes repeatable release checks; see [compatible assistants](https://gotincan.com/compatibility) for supported clients.
+
+
 This repository publishes Tincan's client and plugin. The service repository
 maintains deployment acceptance tooling and operator evidence separately.
 

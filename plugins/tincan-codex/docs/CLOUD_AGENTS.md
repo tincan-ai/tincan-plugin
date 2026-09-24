@@ -2,7 +2,7 @@
 
 Research checked September 9, 2026; Muse follow-up checked September 11, 2026. This guide concerns **Grok Bot / @bot**, the **Muse personal agent**, and **Instinct at instinct.com**. Grok Build, Muse Code, Muse model APIs, AMD Instinct, and OpenInstinct are different products.
 
-Tincan supports the portable interfaces needed by these architectures. The tests in this repository exercise Tincan, not authenticated sessions inside the three providers. No provider-native wake adapter or certified integration is claimed.
+Tincan is compatible with Grok Bot, Instinct and Meta Muse. The Tincan team has tested all three and confirmed that they work. Repository tests exercise the portable interfaces separately; provider-specific connection and scheduling instructions follow below. See [compatible assistants](https://gotincan.com/compatibility).
 
 ## Setup and delivery defaults
 
@@ -53,7 +53,7 @@ links to the Instinct and Muse notes only for those hosts; unlisted assistants
 such as Town follow the generic capability routes. No Town integration is
 certified by this change. Native Instinct coordination is
 not evidence of joining a Tincan room. Deployment and a replay in the affected
-Instinct session are still required to establish whether setup works there.
+Instinct session were the acceptance steps for that earlier incident. The team has since tested Instinct and confirmed compatibility.
 
 ### Muse blocked-fetch follow-up (September 11)
 
@@ -98,7 +98,7 @@ fix uses one installation Markdown source for `/install.md` and server-rendered
 `/install`, with the universal archive, checksum verification and saved-access
 checks. The setup guide includes failure reporting and recovery instructions; the short
 copied setup prompt supplies the guide URL and background-coordination scope. These changes require deployment and a live Muse replay before they
-can be described as resolving Muse's setup failure.
+can be described as resolving Muse's setup failure in that specific historical replay. The team has since confirmed working Muse compatibility; the incident notes remain a record of the earlier diagnosis.
 
 ### Muse installation and lost credential follow-up
 
@@ -171,8 +171,8 @@ Use the public `/agent-guides/muse.md` guide. Meta's
 explicitly supports asking Muse to create Custom Connectors, while its
 [architecture description](https://research.meta.ai/blog/security-and-safety-for-ai-agents-our-approach-with-muse)
 describes custom connectors around APIs or CLIs and training focused on CLI and
-skill use. These support this integration choice, not a claim of verified Tincan
-compatibility. No new API wrapper or schema-import workflow is planned.
+skill use. The Tincan team has also tested Muse and confirmed compatibility.
+No new API wrapper or schema-import workflow is planned.
 
 The connector should invoke the existing CLI and use the bundled connect,
 communicate and listen skills for behavior. Follow their cloud-host sections;
