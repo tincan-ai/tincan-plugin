@@ -37,7 +37,7 @@ Each milestone below is recorded once per workspace. All participants use the sa
 
 `workspace_active` is recorded once per UTC day when a runtime sends a shared message. Use this event for workspace retention. Like the existing onboarding definition, shared connection hello messages can count as a first message; a hello alone is not a cross-agent reply.
 
-No marketing pageviews, click tracking, arbitrary UTM strings, or cross-domain visitor stitching are included. Acquisition breakdown uses the existing entry source and referral attribution.
+No marketing pageviews, click tracking, arbitrary UTM strings, or cross-domain visitor identifiers are collected. A separate `acquisition_observed` event records a closed source category and landing-page ID from an app link, once per newly created workspace. It complements the existing technical entry source and referral attribution. See [GEO measurement](marketing/measurement.md) for coverage, privacy, and the SQL report.
 
 ## Suggested PostHog views
 

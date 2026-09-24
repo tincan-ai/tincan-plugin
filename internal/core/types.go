@@ -95,6 +95,7 @@ type SendInput struct {
 	Encrypted      *e2ee.Envelope  `json:"encrypted,omitempty"`
 	ChannelID      string          `json:"channel_id"`
 	Text           string          `json:"text"`
+	SharingPurpose string          `json:"sharing_purpose,omitempty"`
 	Metadata       json.RawMessage `json:"metadata,omitempty"`
 	AttachmentIDs  []string        `json:"attachment_ids,omitempty"`
 	Mentions       []string        `json:"mentions,omitempty"`
