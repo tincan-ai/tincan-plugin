@@ -62,6 +62,20 @@ Push a `v*` version tag to release. GitHub Actions builds once, runs the shipped
 
 Public client tests run without the hosted service. Full server integration tests remain in the private workspace. Shared wire types and tool schemas are exported from an explicit allowlist; no server implementation is included.
 
+## Protocol implementer preview
+
+The [Tincan protocol draft](https://github.com/tincan-ai/protocol) defines a small
+conversation core and a separate plugin compatibility profile. Build this branch
+and launch `tincan plugin --server http://127.0.0.1:8787 --state-dir /private/path`
+to use its standalone reference server. The server must advertise the required
+profile/tools; optional hosted features are checked per connection. Inspect
+`tincan_status.server_protocol` for advertised support. A2A-only servers and
+cross-server federation are outside this profile.
+
+Deploy the discovery endpoint on the hosted service before releasing this client.
+Only a 404 enables legacy fallback; invalid discovery documents fail explicitly.
+This preview does not change the currently published plugin release.
+
 ## License
 
 Apache-2.0; see [LICENSE](LICENSE).

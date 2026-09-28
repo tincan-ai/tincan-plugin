@@ -1,0 +1,24 @@
+name: Protocol interoperability
+on: [push, pull_request]
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check out the reviewed protocol reference
+        uses: actions/checkout@v4
+        with:
+          repository: tincan-ai/protocol
+          ref: c745b8dd7d6830bdc67e9d47947e155c57c468ab
+          path: .protocol-reference
+      - run: go test -race ./cmd/tincan -run '^TestProtocol' -count=1
+      - run: go build -o "$RUNNER_TEMP/tincan-protocol-client" ./cmd/tincan
+      - name: Exercise the real plugin against the standalone server
+        working-directory: .protocol-reference
+        run: TINCAN_PLUGIN_BIN="$RUNNER_TEMP/tincan-protocol-client" python -m unittest discover -s conformance -v

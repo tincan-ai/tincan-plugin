@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/tincan-ai/tincan-plugin/internal/core"
 	"github.com/tincan-ai/tincan-plugin/internal/httpapi"
+	"github.com/tincan-ai/tincan-plugin/internal/protocol"
 )
 
 const pluginInstructions = `The plugin exposes the shared Tincan capabilities above plus tincan_connect (create/join/resume), tincan_status (connection, pairing, presence and delivery diagnostics), inbox_next (pending work), inbox_wait (experimental delegated listener), inbox_claim (exclusive worker ownership), inbox_release (release after that worker stops), inbox_reply (reply and acknowledge), and inbox_ack (finish without replying). tincan_pairing_wait is only a compatibility alias for immediate status. Use workspace_info to retrieve the capability guide again. Consult tincan-communicate for rooms, channels, collaboration, files, export and account tools; tincan-scrapbook for private notes; tincan-listen for inbound work; tincan-connect for connection setup.
@@ -35,6 +36,7 @@ Claude’s bundled asyncRewake hook can wake an idle CLI without channel flags. 
 // The vault belongs to the plugin, not to the shell's global CLI identity.
 // Opaque handles isolate tasks even when a host shares one MCP process.
 type pluginConnection struct {
+	Protocol           *protocol.Descriptor  `json:"protocol,omitempty"`
 	RoomEncryptionMode string                `json:"room_encryption_mode,omitempty"`
 	Admin              bool                  `json:"admin,omitempty"`
 	PendingJoin        *core.JoinReceipt     `json:"pending_join,omitempty"`
@@ -211,6 +213,12 @@ func (b *pluginBroker) connect(rawURL, name, workspace string, contexts ...conne
 	}
 	name += "-" + core.ID("")[:6]
 	c := &pluginConnection{Handle: core.ID("conn_"), Config: Config{Server: server}, Name: name, Profile: profile, Intent: intent}
+	if err = b.refreshProtocol(context.Background(), c); err != nil {
+		return nil, err
+	}
+	if (intro.Encrypted || len(root) > 0) && !c.Protocol.Supports("e2ee") {
+		return nil, errors.New("this server does not support encrypted rooms")
+	}
 	endpoint := "/bootstrap"
 	input := map[string]any{"name": workspace, "agent_name": name}
 	if invite != "" {
@@ -318,6 +326,9 @@ func (b *pluginBroker) prepare(c *pluginConnection) error {
 		return err
 	}
 	*c = *latest
+	if err = b.refreshProtocol(context.Background(), c); err != nil {
+		return err
+	}
 	v, err := call(c.Config, "GET", "/me", nil)
 	if err != nil {
 		return err
@@ -400,7 +411,7 @@ func (b *pluginBroker) prepare(c *pluginConnection) error {
 			return err
 		}
 	}
-	if !c.Admin || me.Workspace.Claimed {
+	if !c.Protocol.Supports("workspace-claim") || !c.Admin || me.Workspace.Claimed {
 		c.ClaimURL, c.ClaimExpiresAt = "", time.Time{}
 	} else if c.ClaimURL == "" || !time.Now().Before(c.ClaimExpiresAt) {
 		v, err := call(c.Config, "POST", "/workspace/claim", map[string]any{})
@@ -446,6 +457,7 @@ func connectionView(c *pluginConnection) map[string]any {
 	}
 	view := map[string]any{"connection": c.Handle, "agent_id": c.AgentID, "name": c.Name, "profile": c.Profile, "intent": c.Intent, "room_id": c.RoomID, "room_name": c.RoomName, "channel_id": c.ChannelID, "share_url": c.ShareURL, "paired": false, "next": core.ConnectionWelcomeInstructions + " Finish this turn. Background streaming handles pairing and mentions. Keep the connection handle private to this task."}
 	view["encryption_mode"] = connectionEncryptionMode(c)
+	view["server_protocol"] = c.Protocol
 	if !c.ShareExpiresAt.IsZero() {
 		view["share_expires_at"] = c.ShareExpiresAt
 	}
@@ -769,6 +781,9 @@ func (b *pluginBroker) serverWithTools(remoteTools []*mcp.Tool) *mcp.Server {
 				return nil, err
 			}
 			delete(args, "connection")
+			if err := checkServerTool(c, tool.Name, args); err != nil {
+				return localToolResult(nil, err)
+			}
 			if tool.Name == "room_create" {
 				if encrypted, _ := args["e2ee"].(bool); encrypted {
 					name, _ := args["name"].(string)
