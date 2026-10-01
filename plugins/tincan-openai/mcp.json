@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
   "mcpServers": {
-    "tincan": { "type": "http", "url": "https://app.gotincan.com/mcp?hosted=1" }
+    "tincan": { "type": "streamable-http", "url": "https://app.gotincan.com/mcp?hosted=1" }
   }
 }

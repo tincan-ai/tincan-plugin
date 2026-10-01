@@ -22,6 +22,10 @@ def https_url(value, origin=False):
 
 
 def validate(manifest, files, require_review=False):
+    if manifest.get('$schema') != 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json':
+        raise ValueError('Expected the Agent Plugins 1.0.0 manifest schema')
+    if set(manifest) - {'$schema', 'name', 'version', 'description', 'author', 'homepage', 'repository', 'license', 'keywords', 'extensions'}:
+        raise ValueError('Unsupported portable manifest field')
     if not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', manifest['name']) or len(manifest['name']) > 64:
         raise ValueError('Expected a stable lowercase plugin name with single hyphens')
     ui = manifest['extensions']['com.openai']['interface']
@@ -38,10 +42,17 @@ def validate(manifest, files, require_review=False):
     prompts = [prompts] if isinstance(prompts, str) else prompts
     if len(prompts) > 3 or any(not isinstance(p, str) or not 0 < len(p) <= 128 for p in prompts) or len(set(prompts)) != len(prompts):
         raise ValueError('Use up to three distinct starter prompts of at most 128 characters')
-    for field in ('logo', 'composerIcon', 'logoDark'):
-        if field in ui and ui[field].removeprefix('./') not in files:
-            raise ValueError(f'Missing asset for {field}')
+    for field in ('logo', 'composerIcon'):
+        if not ui.get(field):
+            raise ValueError(f'Missing required distribution asset: {field}')
+    asset_paths = [ui[field] for field in ('logo', 'composerIcon', 'logoDark', 'composerIconDark') if field in ui]
+    asset_paths.extend(ui.get('screenshots', []))
+    for path in asset_paths:
+        if not isinstance(path, str) or not path.startswith('./') or '..' in Path(path).parts or path[2:] not in files:
+            raise ValueError(f'Invalid or missing packaged asset: {path}')
     extension = manifest['extensions']['com.openai']
+    if any(key in extension for key in ('apps', 'hooks')):
+        raise ValueError('Public submission does not support app references or lifecycle hooks')
     if any(key in extension.get('review', {}) for key in ('test_credentials', 'reviewer_instructions')):
         raise ValueError('Reviewer access belongs in the secure dashboard, never the package')
     path = extension['onboardingSkill']
@@ -58,6 +69,8 @@ def validate(manifest, files, require_review=False):
             raise ValueError('Incomplete negative review case')
     if require_review and not extension['review'].get('demo_recording_url'):
         raise ValueError('Supply --demo-recording-url before claiming the package is review-ready')
+    if extension['review'].get('demo_recording_url'):
+        https_url(extension['review']['demo_recording_url'])
     for path in files:
         if Path(path).parts[0] not in ('skills', 'assets', 'plugin.json', 'mcp.json', 'LICENSE', 'README.md'):
             raise ValueError(f'Unsupported hosted package file: {path}')
@@ -74,8 +87,10 @@ def build(root, output, server='https://app.gotincan.com', version=None, demo=No
     if demo:
         manifest['extensions']['com.openai']['review']['demo_recording_url'] = https_url(demo)
     mcp = json.loads((source / 'mcp.json').read_text())
-    if set(mcp) - {'$schema', 'mcpServers'} or set(mcp['mcpServers']) != {'tincan'} or set(mcp['mcpServers']['tincan']) != {'type', 'url'} or mcp['mcpServers']['tincan']['type'] != 'http':
-        raise ValueError('The hosted package requires one remote HTTP server without inline credentials')
+    if mcp.get('$schema') != 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json':
+        raise ValueError('Expected the Agent Plugins 1.0.0 MCP schema')
+    if set(mcp) - {'$schema', 'mcpServers'} or set(mcp['mcpServers']) != {'tincan'} or set(mcp['mcpServers']['tincan']) != {'type', 'url'} or mcp['mcpServers']['tincan']['type'] != 'streamable-http':
+        raise ValueError('The hosted package requires one streamable-http server without inline credentials')
     mcp['mcpServers']['tincan']['url'] = server + '/mcp?hosted=1'
     files = {}
     for path in sorted((source / 'skills').rglob('*')):
