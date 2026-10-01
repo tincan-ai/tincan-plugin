@@ -72,11 +72,13 @@ func (b *pluginBroker) startBackground(c *pluginConnection) error {
 	i.background = true
 	i.mu.Unlock()
 	b.workers[c.Handle] = true
-	b.wg.Add(1)
-	go func() {
-		defer b.wg.Done()
-		runPresence(b.runCtx, saved.Config, func(ctx context.Context) bool { return b.runtimeAvailable(ctx, saved) }, core.PresenceInterval)
-	}()
+	if saved.Protocol.Supports("presence") {
+		b.wg.Add(1)
+		go func() {
+			defer b.wg.Done()
+			runPresence(b.runCtx, saved.Config, func(ctx context.Context) bool { return b.runtimeAvailable(ctx, saved) }, core.PresenceInterval)
+		}()
+	}
 	b.wg.Add(1)
 	go func() {
 		defer b.wg.Done()
@@ -207,12 +209,14 @@ func (b *pluginBroker) status(handle string) (map[string]any, error) {
 	b.mu.Unlock()
 	streamState := "starting"
 	streamError := ""
+	streamTransport := ""
 	execution := inboundExecution()
 	if i != nil {
 		i.mu.Lock()
 		if i.streaming {
 			streamState = "streaming"
 		}
+		streamTransport = i.streamTransport
 		if i.streamError != "" {
 			streamState = "reconnecting"
 			streamError = i.streamError
@@ -246,6 +250,8 @@ func (b *pluginBroker) status(handle string) (map[string]any, error) {
 	if i != nil {
 		view["commitments"] = i.requests()
 	}
+	view["server_protocol"] = c.Protocol
+	view["event_transport"] = streamTransport
 	b.addHarnessReadiness(view, c)
 	connectionReadiness(view)
 	return view, nil

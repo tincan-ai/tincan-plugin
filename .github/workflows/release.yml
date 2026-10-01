@@ -49,6 +49,22 @@ jobs:
           name: universal-plugin
           path: dist/releases/*
           if-no-files-found: error
+      - name: Verify and build hosted OpenAI directory package
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_package_openai.py'
+          if [ "$IS_RELEASE" = true ]; then
+            python3 scripts/package-openai-plugin.py --version "${RELEASE_TAG#v}"
+          else
+            python3 scripts/package-openai-plugin.py --server https://tincan.invalid
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openai-plugin
+          path: dist/openai/*
+          if-no-files-found: error
   smoke:
     needs: build
     strategy:
@@ -132,6 +148,15 @@ jobs:
           name: universal-plugin
           path: dist/releases
       - run: python3 scripts/publish-marketplace.py dist/releases/tincan-plugin.zip --codex-archive dist/releases/tincan-codex-plugin.zip
+      - uses: actions/download-artifact@v4
+        with:
+          name: openai-plugin
+          path: dist/openai
+      - name: Add hosted plugin and separate metadata to release assets
+        run: |
+          cp dist/openai/tincan-openai-plugin.zip dist/releases/
+          cp dist/openai/manifest.json dist/releases/tincan-openai-manifest.json
+          cat dist/openai/SHA256SUMS >> dist/releases/SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/releases/*

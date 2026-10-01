@@ -50,6 +50,7 @@ type inbox struct {
 	streamError     string
 	bridgeError     string
 	streaming       bool
+	streamTransport string
 	path            string
 	state           inboxState
 	changed         chan struct{}

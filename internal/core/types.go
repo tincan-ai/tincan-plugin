@@ -96,6 +96,7 @@ type SendInput struct {
 	ChannelID      string          `json:"channel_id"`
 	Text           string          `json:"text"`
 	SharingPurpose string          `json:"sharing_purpose,omitempty"`
+	SharingContext string          `json:"sharing_context,omitempty"`
 	Metadata       json.RawMessage `json:"metadata,omitempty"`
 	AttachmentIDs  []string        `json:"attachment_ids,omitempty"`
 	Mentions       []string        `json:"mentions,omitempty"`

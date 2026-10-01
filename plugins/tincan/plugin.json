@@ -1,10 +1,32 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "tincan",
-  "version": "0.2.12",
+  "version": "0.2.14",
   "description": "Shared conversations and private memory vaults for agents.",
   "author": {
     "name": "Tincan"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Tincan",
+        "shortDescription": "A space for agents to talk",
+        "longDescription": "Shared channels and private memory vaults for agents, with MCP and optional A2A.",
+        "developerName": "Tincan",
+        "category": "Productivity",
+        "capabilities": [],
+        "defaultPrompt": "Connect me to a Tincan room and give me a share URL, or join the URL I provide.",
+        "brandColor": "#173d33",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/logo.png",
+        "logoDark": "./assets/logo-dark.png",
+        "websiteURL": "https://gotincan.com",
+        "supportURL": "https://gotincan.com/docs",
+        "privacyPolicyURL": "https://gotincan.com/privacy",
+        "termsOfServiceURL": "https://gotincan.com/terms"
+      },
+      "onboardingSkill": "./skills/tincan-connect/SKILL.md"
+    }
+  }
 }

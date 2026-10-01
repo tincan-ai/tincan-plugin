@@ -142,3 +142,79 @@ func TestPluginClaudeCapabilityAndNotificationMetadata(t *testing.T) {
 		t.Fatalf("missing routing metadata: %s", data)
 	}
 }
+
+func TestBufferedSSEFallsBackWithoutLosingOrDuplicatingMentions(t *testing.T) {
+	var streams, batches atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-token" {
+			t.Error("missing authentication")
+		}
+		if r.Header.Get("Accept") != "application/json" {
+			streams.Add(1)
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(200)
+			w.(http.Flusher).Flush() // Exactly the observed tunnel: headers, no bytes.
+			<-r.Context().Done()
+			return
+		}
+		batches.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("after") == "0" {
+			json.NewEncoder(w).Encode([]inboxEvent{event(1, "peer", "self"), event(2, "peer", "self")})
+			return
+		}
+		if r.URL.Query().Get("after") != "2" {
+			t.Error("lost durable cursor")
+		}
+		<-r.Context().Done() // No idle notification or busy loop.
+	}))
+	defer server.Close()
+	i := &inbox{agent: "self", allowed: []string{"peer"}, background: true, c: Config{Server: server.URL, Token: "test-token"}, path: filepath.Join(t.TempDir(), "inbox.json")}
+	defer i.close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	delivered := make(chan int64, 3)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		i.streamWithIdleTimeout(ctx, nil, func(_ context.Context, e *inboxEvent) error { delivered <- e.Seq; return nil }, 30*time.Millisecond)
+	}()
+	for _, want := range []int64{1, 2} {
+		select {
+		case got := <-delivered:
+			if got != want {
+				t.Fatalf("got %d want %d", got, want)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("buffered stream stranded mention")
+		}
+	}
+	deadline := time.After(time.Second)
+	for batches.Load() < 2 {
+		select {
+		case <-deadline:
+			t.Fatal("cursor was not resumed")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	if streams.Load() != 1 || batches.Load() != 2 {
+		t.Fatal("unexpected transport retries")
+	}
+	select {
+	case <-delivered:
+		t.Fatal("duplicate notification")
+	default:
+	}
+	i.mu.Lock()
+	transport, after := i.streamTransport, i.state.After
+	i.mu.Unlock()
+	if transport != "json_wait" || after != 2 {
+		t.Fatal("fallback status or cursor missing")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("fallback did not stop on cancellation")
+	}
+}

@@ -364,6 +364,8 @@ func main() {
 	channel := f.String("channel", "", "Channel ID")
 	room := f.String("room", "", "Room ID")
 	text := f.String("text", "", "Message text")
+	sharingPurpose := f.String("sharing-purpose", "", "Current task for message protection")
+	sharingContext := f.String("sharing-context", "", "Private task context after a flagged send")
 	metadata := f.String("metadata", "{}", "Arbitrary JSON metadata")
 	agentMetadata := f.String("agent-metadata", "", "Known harness/model/runtime analytics as JSON; omit unknown fields")
 	mentions := f.String("mentions", "", "Comma-separated agent IDs")
@@ -606,7 +608,7 @@ func main() {
 		if *attachments != "" {
 			at = strings.Split(*attachments, ",")
 		}
-		v, e = call(c, "POST", "/messages", core.SendInput{ChannelID: *channel, Text: *text, Metadata: json.RawMessage(*metadata), Mentions: m, AttachmentIDs: at, IdempotencyKey: *key})
+		v, e = call(c, "POST", "/messages", core.SendInput{ChannelID: *channel, Text: *text, SharingPurpose: *sharingPurpose, SharingContext: *sharingContext, Metadata: json.RawMessage(*metadata), Mentions: m, AttachmentIDs: at, IdempotencyKey: *key})
 	case "history", "search":
 		q := url.Values{"channel_id": {*channel}, "q": {*query}, "after": {fmt.Sprint(*after)}, "before": {fmt.Sprint(*before)}}
 		v, e = call(c, "GET", "/messages?"+q.Encode(), nil)
@@ -709,7 +711,7 @@ func help() {
   tincan room-create --name Workshop
   tincan room-archive --room ID
   tincan room-restore --room ID
-  tincan send --channel ID --text TEXT [--metadata JSON] [--mentions AGENT_ID]
+  tincan send --channel ID --text TEXT [--sharing-purpose TASK] [--sharing-context CONTEXT] [--metadata JSON] [--mentions AGENT_ID]
   tincan history --channel ID [--before SEQ]
   tincan search --query WORDS
   tincan security [--require-join-approval true|false]
