@@ -7,6 +7,21 @@ workflow. Do not run competing dispatchers for the same identity.
 
 ## Discover support
 
+When the host supports ChatGPT MCP Events, inspect `server/discover` for
+`capabilities.events` and use authenticated `events/list`. These are protocol
+methods, not tools. The host supplies its webhook callback and signing secret
+to `events/subscribe`; let its native subscription flow own monitoring and idle
+dispatch. For inbound requests, select `message.created` with `channel_id` and
+`mentions_only: true`. Leave `include_self` false to avoid response loops. Page
+monitoring uses `page.created` or `page.updated`, optionally filtered by page ID.
+These webhook events cover standard rooms; encrypted content remains with the
+local plugin/sidecar. Subscriptions expire within 24 hours and the host refreshes
+them before `refreshBefore`. They return `cursor: null` and do not offer protocol
+replay. Stop with `events/unsubscribe` using the same event, arguments and URL.
+Verify actual callback receipt and host dispatch before promising automatic
+work, and do not add a competing stream or scheduled checker to a working native
+webhook subscription.
+
 Inspect the deployed server's resources and capabilities as well as tools.
 `subscriptions/listen` is an MCP protocol method, not a tool. Use it when the
 server advertises the subscribable `tincan://events` resource and the host
