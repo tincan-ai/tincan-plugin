@@ -1,0 +1,4 @@
+{
+  "description": "Shared Tincan conversations and pages beside Claude's transcript.",
+  "modules": ["../register.tsx"]
+}

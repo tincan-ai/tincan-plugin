@@ -30,7 +30,7 @@ def build(root, output, go, server, version, targets, marketplace=None, harness=
                         ignore=shutil.ignore_patterns('bin', '__pycache__', '.DS_Store', '.env', '.env.*'))
         (plugin / 'bin').mkdir(exist_ok=True)
         shutil.copy2(root / '.tools/mls/wasm32-wasip1/release/tincan-mls.wasm', plugin / 'bin/tincan-mls.wasm')
-        for manifest_name in ('.claude-plugin/plugin.json', '.codex-plugin/plugin.json', '.cursor-plugin/plugin.json', 'package.json', 'plugin.json'):
+        for manifest_name in ('.claude-plugin/plugin.json', '.codex-plugin/plugin.json', '.cursor-plugin/plugin.json', 'package.json', 'plugin.json', 'native/claude/.claude-plugin/plugin.json'):
             path = plugin / manifest_name
             manifest = json.loads(path.read_text(encoding="utf-8"))
             manifest['version'] = version
@@ -61,8 +61,20 @@ def build(root, output, go, server, version, targets, marketplace=None, harness=
             subprocess.run([go, 'build', '-trimpath', '-ldflags=-s -w',
                             '-o', str(plugin / 'bin/tincan.exe'), './cmd/tincan-launcher'], cwd=root,
                            env=dict(os.environ, GOOS='windows', GOARCH='386', CGO_ENABLED='0'), check=True)
-        if harness in ('cursor', 'codex'):
+        if harness in ('cursor', 'codex', 'claude-mod'):
             (plugin / 'plugin.json').unlink()  # Select the harness's native manifest.
+        if harness == 'claude-mod':
+            # One complete replacement for the stable Claude plugin, retaining
+            # its sole MCP runtime and all binding/asyncRewake command hooks.
+            # Generate from the canonical hooks so lifecycle delivery cannot drift.
+            hooks = json.loads((plugin / 'hooks/claude.json').read_text(encoding='utf-8'))
+            hooks['modules'] = ['../native/claude/register.tsx']
+            write_json(plugin / 'hooks/claude-mod.json', hooks)
+            path = plugin / '.claude-plugin/plugin.json'
+            manifest = json.loads(path.read_text(encoding='utf-8'))
+            manifest['hooks'] = './hooks/claude-mod.json'
+            manifest['description'] = 'Shared conversations, agent presence and collaborative pages beside Claude’s transcript. Function-hook preview; includes the complete Tincan client.'
+            write_json(path, manifest)
         if harness == 'codex':
             # Codex 0.153.4's portable MCP schema rejects timeout fields and
             # plugin user-policy overrides do not apply them. Native MCP config
@@ -81,7 +93,7 @@ def build(root, output, go, server, version, targets, marketplace=None, harness=
         yaml_manifest = plugin / 'plugin.yaml'
         yaml_manifest.write_text(re.sub(r'^version: .*$', 'version: ' + version, yaml_manifest.read_text(encoding="utf-8"), flags=re.M), encoding="utf-8")
         shutil.copy2(root / 'LICENSE', plugin / 'LICENSE')
-        for name in ('E2EE.md', 'CLOUD_AGENTS.md', 'AGENT_METADATA.md', 'AGENT_TEXT.md', 'ONBOARDING_RELEASE_GATE.md', 'ONBOARDING.md', 'CLIENTS.md', 'HARNESS_DELIVERY.md', 'CLAUDE_WAKE.md'):
+        for name in ('E2EE.md', 'CLOUD_AGENTS.md', 'AGENT_METADATA.md', 'AGENT_TEXT.md', 'ONBOARDING_RELEASE_GATE.md', 'ONBOARDING.md', 'CLIENTS.md', 'HARNESS_DELIVERY.md', 'CLAUDE_WAKE.md', 'CLAUDE_MOD.md'):
             (plugin / 'docs').mkdir(exist_ok=True)
             shutil.copy2(root / 'docs' / name, plugin / 'docs' / name)
             doc = plugin / 'docs' / name
@@ -142,7 +154,7 @@ def main():
     parser.add_argument('--server', default=os.environ.get('TINCAN_RELEASE_SERVER', 'https://app.gotincan.com'))
     parser.add_argument('--version')
     parser.add_argument('--target', choices=TARGETS, help='Optional single-platform developer package')
-    parser.add_argument('--harness', choices=['cursor', 'codex'], help='Native harness package (Cursor hooks or Codex listener timeout)')
+    parser.add_argument('--harness', choices=['cursor', 'codex', 'claude-mod'], help='Native harness package, including the opt-in Claude mod preview')
     parser.add_argument('--marketplace', type=Path, help='Write the complete marketplace tree for Git distribution')
     args = parser.parse_args()
     if not args.server:

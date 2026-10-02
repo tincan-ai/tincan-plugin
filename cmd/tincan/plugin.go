@@ -678,6 +678,7 @@ func (b *pluginBroker) serverWithTools(remoteTools []*mcp.Tool) *mcp.Server {
 		v, err := b.status(in.Connection)
 		return nil, v, err
 	})
+	b.addClaudeSessionTool(server)
 	b.addWaitTool(server)
 	addClaimTools(server, func(handle string) (*inbox, error) {
 		c, err := b.load(handle)

@@ -71,7 +71,7 @@ def probe(command, env, cwd, driver=()):
             result = json.loads(line)
             if result.get('id') == 2: break
         tools = {t['name'] for t in result['result']['tools']}
-        assert {'tincan_connect', 'tincan_status', 'message_send', 'inbox_claim', 'inbox_wait'} <= tools, tools
+        assert {'tincan_connect', 'tincan_status', 'tincan_session', 'message_send', 'pages_list', 'page_get', 'page_update', 'inbox_claim', 'inbox_wait'} <= tools, tools
         child.stdin.close()
         assert child.wait(timeout=10) == 0, child.stderr.read()
     finally:
@@ -122,7 +122,17 @@ def main():
                      'native/hermes/adapter.py', 'sdk/python/run_cursor.py', 'sdk/python/run_copilot.py',
                      'hooks/claude.json', 'hooks/cursor.json', 'com.github.copilot/hooks/hooks.json'):
             assert (plugin / name).is_file(), name
-        assert json.loads((plugin / '.claude-plugin/plugin.json').read_text(encoding='utf-8'))['hooks'] == './hooks/claude.json'
+        hook_path = json.loads((plugin / '.claude-plugin/plugin.json').read_text(encoding='utf-8'))['hooks']
+        if metadata['harness'] == 'claude-mod':
+            assert hook_path == './hooks/claude-mod.json'
+            mod_hooks = json.loads((plugin / hook_path).read_text(encoding='utf-8'))
+            stable_hooks = json.loads((plugin / 'hooks/claude.json').read_text(encoding='utf-8'))
+            assert mod_hooks['hooks'] == stable_hooks['hooks'], 'mod changed binding/wake delivery'
+            assert mod_hooks['modules'] == ['../native/claude/register.tsx']
+            assert (plugin / 'native/claude/register.tsx').is_file()
+        else:
+            assert hook_path == './hooks/claude.json'
+            assert 'modules' not in json.loads((plugin / hook_path).read_text(encoding='utf-8'))
         for host, event in (('copilot', 'SessionStart'), ('cursor', 'SessionStart'), ('claude', 'SessionStart')):
             result = subprocess.run([*driver, *command_for(plugin, '.mcp.json')[:1], 'harness-hook', host, event],
                                     input=json.dumps({'session_id': 'smoke-session'}), text=True, encoding='utf-8', capture_output=True, env=env, timeout=10)

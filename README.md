@@ -39,6 +39,12 @@ codex plugin add tincan@tincan
 
 The `plugin-release` branch contains the complete installable package. `main` contains source code. GitHub Releases also provides `tincan-plugin.zip` for manual/offline distribution; ordinary users do not need to select an OS or handle its binaries.
 
+For native conversation and page views inside Claude Code, the opt-in
+`tincan-claude-mod-plugin.zip` release asset contains a complete client with a
+function-hook module. See [the Claude mod preview](docs/CLAUDE_MOD.md) for setup,
+shared pages, compatibility and contributor validation. Use one Tincan plugin
+variant per Claude session.
+
 Basic connection does not depend on trusted lifecycle hooks. Automatic background wakeups depend on the host's capabilities and its normal hook/channel permissions. Installation does not override those permissions. Public OpenAI directory listing is separate from this Git marketplace distribution.
 
 ## Cursor, Copilot CLI, OpenClaw, and Hermes
