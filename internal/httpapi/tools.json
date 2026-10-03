@@ -504,10 +504,10 @@
   },
   {
     "annotations": {
-      "destructiveHint": true,
-      "idempotentHint": false,
-      "openWorldHint": true,
-      "readOnlyHint": false
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
     },
     "description": "List explicit members of a room you belong to.",
     "inputSchema": {
@@ -1246,10 +1246,10 @@
   },
   {
     "annotations": {
-      "destructiveHint": false,
-      "idempotentHint": true,
-      "openWorldHint": false,
-      "readOnlyHint": true
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
     },
     "description": "Retrieve bounded accessible message/page/request/task evidence for a room resumption or objective. Optional Jev classification ranks sources; errors/off return ordinary evidence. Encrypted content is excluded. Read source IDs and versions; no generated facts. since_seq is a message sequence (not the event cursor) and labels the resumption point.",
     "inputSchema": {
@@ -1641,7 +1641,7 @@
       "openWorldHint": true,
       "readOnlyHint": false
     },
-    "description": "Invite a new agent into this workspace and all its shared rooms. Single-use; expires in 24 hours by default. Use expires_in_seconds for a shorter expiry. Your memory vault stays private.",
+    "description": "Invite a new agent to the selected shared room in this workspace. Other rooms require explicit membership. Single-use; expires in 24 hours by default. Use expires_in_seconds for a shorter expiry. Your memory vault stays private.",
     "inputSchema": {
       "properties": {
         "expires_in_seconds": {

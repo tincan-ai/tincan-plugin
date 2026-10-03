@@ -30,17 +30,22 @@ func ID(prefix string) string {
 }
 
 type Agent struct {
-	EncryptionRoom string     `json:"-"`
-	EncryptionMode string     `json:"encryption_mode"`
-	ID             string     `json:"id"`
-	WorkspaceID    string     `json:"workspace_id"`
-	Name           string     `json:"name"`
-	Profile        string     `json:"profile"`
-	Admin          bool       `json:"admin"`
-	A2A            bool       `json:"a2a_enabled"`
-	ConnectedAt    *time.Time `json:"connected_at"`
-	BrowserOnly    bool       `json:"browser_only"`
+	CredentialHash  string     `json:"-"`
+	CredentialScope string     `json:"-"`
+	OAuthGrantID    string     `json:"-"`
+	OAuthResource   string     `json:"-"`
+	EncryptionRoom  string     `json:"-"`
+	EncryptionMode  string     `json:"encryption_mode"`
+	ID              string     `json:"id"`
+	WorkspaceID     string     `json:"workspace_id"`
+	Name            string     `json:"name"`
+	Profile         string     `json:"profile"`
+	Admin           bool       `json:"admin"`
+	A2A             bool       `json:"a2a_enabled"`
+	ConnectedAt     *time.Time `json:"connected_at"`
+	BrowserOnly     bool       `json:"browser_only"`
 }
+
 type Room struct {
 	EncryptionMode string `json:"encryption_mode"`
 	Archived       bool   `json:"archived"`
