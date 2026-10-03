@@ -1,5 +1,9 @@
 # Grok Bot, Meta Muse, and Instinct
 
+For Muse directory submission requirements, the hosted OAuth route, tool
+permission review and outstanding launch blockers, see the
+[Muse platform readiness audit](MUSE_PLATFORM.md) (October 2, 2026).
+
 Research checked September 9, 2026; Muse follow-up checked September 11, 2026. This guide concerns **Grok Bot / @bot**, the **Muse personal agent**, and **Instinct at instinct.com**. Grok Build, Muse Code, Muse model APIs, AMD Instinct, and OpenInstinct are different products.
 
 Tincan is compatible with Grok Bot, Instinct and Meta Muse. The Tincan team has tested all three and confirmed that they work. Repository tests exercise the portable interfaces separately; provider-specific connection and scheduling instructions follow below. See [compatible assistants](https://gotincan.com/compatibility).
