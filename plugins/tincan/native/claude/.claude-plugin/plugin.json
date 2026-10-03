@@ -1,0 +1,8 @@
+{
+  "name": "tincan",
+  "version": "0.2.16",
+  "author": {
+    "name": "Tincan"
+  },
+  "description": "Tincan's Claude mod source and engine contract tests. Use the packaged preview for the complete client."
+}
